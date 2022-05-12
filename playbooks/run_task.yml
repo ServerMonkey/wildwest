@@ -1,0 +1,11 @@
+---
+#info: Executes a tast from a role as Ansible playbook
+- hosts: all
+  gather_facts: no
+  tasks:
+
+    - name: Task
+      include_role:
+        name: '{{ ww_role }}'
+      vars:
+        task: '{{ ww_script }}'

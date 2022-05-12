@@ -1,0 +1,6 @@
+---
+#info: Executes a role as Ansible playbook
+- hosts: '{{ inventory_hostname }}'
+  gather_facts: no
+  roles:
+    - '{{ ww_role }}'

@@ -1,0 +1,1229 @@
+#!/usr/bin/env python3
+# coding=utf-8
+# PYTHON_ARGCOMPLETE_OK
+
+# PARSER LIBRARIES ############################################################
+
+import argparse
+import argcomplete
+import configparser
+import os
+import subprocess
+
+# NEVER RUN AS ROOT ###########################################################
+
+if os.geteuid() == 0:
+    print("This software must be run as a normal user, not root!")
+    exit(1)
+
+# BASIC STATIC VARIABLES ######################################################
+
+# application path
+app = os.path.realpath(__file__)
+app_name = str(app.rsplit("/", 1)[1])
+path_app = app.rstrip(app_name)
+path_home = os.path.expanduser("~")
+# path_cfg = path_home + "/." + app_name + "/"
+path_cfg = path_home + "/.ww/"
+file_ww_cfg = path_cfg + "ww.cfg"
+
+# pathes global
+path_appdata = "/usr/local/share/wildwest/"
+path_plugins_os = path_appdata + "ansible-plugins/"
+
+# pathes galaxy
+path_ansible = path_home + "/.ansible/"
+path_roles = path_ansible + "roles/"
+path_collections = path_ansible + "collections/ansible_collections/"
+
+# pathes local
+path_reports = path_cfg + "reports/"
+path_playbooks = path_cfg + "playbooks/"
+path_inventory = path_cfg + "inventory/"
+path_inventorymaker_src = path_cfg + "inventory_src/"
+path_cache = path_cfg + "cache/"
+path_worklists = path_cfg + "worklists/"
+path_repo = path_cfg + "repo/"
+path_logs = path_cache + "logs/"
+path_tmp = "/tmp/" + app_name + "/"
+file_ansible_cfg = path_cfg + "ansible.cfg"
+file_ansible_cfg_local = path_home + '/.ansible.cfg'
+
+# base inventory
+file_inventory_server = path_inventory + "inventory.ini"
+
+
+# PARSER FUNCTIONS ############################################################
+
+def cfg_check_category(namespace, path_script, category):
+    # check if path in config file exist
+    try:
+        if os.listdir(path_script):
+            pass
+    except FileNotFoundError:
+        print("Config error: [" + category + "] --> " + namespace +
+              "  can't be found in " + path_script)
+        exit(1)
+
+
+def get_dict_scripts(firstparser, path_script, category):
+    dict_tmp = {}
+
+    cfg_check_category(firstparser, path_script, category)
+
+    # for each script file
+    for i in sorted(os.listdir(path_script)):
+        if os.path.isfile(path_script + i):
+            # ignore files that start with "_"
+            if not i.startswith(("_", 'main.')):
+                if i.endswith(('.yml', '.yaml', '.sh')):
+                    # remove script extension name
+                    secondparser = i.rsplit(".", 1)[0]
+                    help_text = get_script_header(path_script + i)
+                    script_id = firstparser + "---" + secondparser
+                    script_type = i.split(sep='.')[1]
+
+                    dict_tmp.update({script_id:
+                                         [firstparser,
+                                          secondparser,
+                                          path_script,
+                                          i,
+                                          help_text,
+                                          category,
+                                          script_type]})
+
+    return dict_tmp
+
+
+def get_dict_role(namespace, path_script, category):
+    dict_tmp = {}
+
+    cfg_check_category(namespace, path_script, category)
+
+    namespace_split = namespace.split(sep='.')
+    firstparser = namespace_split[0]
+    secondparser = namespace_split[1]
+    script_id = firstparser + "---" + secondparser
+    file_script = "N/A"
+    help_text = "Ansible role"
+    script_type = "N/A"
+
+    dict_tmp.update({script_id:
+                         [firstparser,
+                          secondparser,
+                          path_script,
+                          file_script,
+                          help_text,
+                          category,
+                          script_type]})
+
+    return dict_tmp
+
+
+def get_dict_galaxyroles(namespace, path_script, category):
+    dict_tmp = {}
+
+    cfg_check_category(namespace, path_script, category)
+
+    # for each script file
+    for i in sorted(os.listdir(path_script)):
+        if os.path.isdir(path_script + i):
+            # ignore folders that start with "_"
+            if not i.startswith(("_", 'main')):
+                firstparser = namespace
+                secondparser = i
+                script_id = firstparser + "---" + secondparser
+                file_script = "N/A"
+                help_text = "Ansible-Galaxy role"
+                script_type = "N/A"
+
+                dict_tmp.update({script_id:
+                                     [firstparser,
+                                      secondparser,
+                                      path_script,
+                                      file_script,
+                                      help_text,
+                                      category,
+                                      script_type]})
+
+    return dict_tmp
+
+
+def load_cfg():
+    dict_tmp = {}
+
+    # init the ini parser and allow single string keys
+    config = configparser.ConfigParser(allow_no_value=True)
+    config.optionxform = lambda option: option
+    # read the ww.cfg file
+    config.read(file_ww_cfg)
+    # find sections
+    config.sections()
+    # for each section
+    for section in config.sections():
+        # for each role_namespace
+        for key in config[section]:
+            namespace = key.split(sep='.')
+            # settings
+            if section == 'settings':
+                for sub_key, value in config.items('settings'):
+                    # inventorymaker is used
+                    if sub_key == 'inventorymaker_src':
+                        # load settings
+                        if value.lower() == 'default':
+                            path_source = path_inventorymaker_src
+                        else:
+                            path_source = value
+                        # generate inventory with inventorymaker
+                        cmd = 'inventorymaker ' + path_source + ' ' \
+                              + file_inventory_server
+                        try:
+                            subprocess.run([cmd], check=True, shell=True)
+                        except subprocess.CalledProcessError:
+                            print('Aborting, inventorymaker failed')
+                            print('Command was: ' + cmd)
+                            exit(1)
+                        except FileNotFoundError:
+                            print('ERROR: inventorymaker ist not installed')
+                            exit(1)
+
+            # add tasks to subparser
+            elif section == "galaxy-playbooks":
+                key_path = path_collections + namespace[0] + "/" \
+                           + namespace[1] + "/playbooks/"
+                dict_tmp.update(get_dict_scripts(key, key_path, section))
+
+            elif section == "galaxy-roles":
+                key_path = path_collections + namespace[0] + "/" + \
+                           namespace[1] + "/roles/"
+                dict_tmp.update(get_dict_galaxyroles(key, key_path, section))
+
+            elif section == "role":
+                key_path = path_roles + key + "/"
+                dict_tmp.update(get_dict_role(key, key_path, section))
+
+            elif section == "tasks-from-roles":
+                key_path = path_roles + key + "/tasks/"
+                dict_tmp.update(get_dict_scripts(key, key_path, section))
+
+            elif section == "playbooks-and-scripts":
+                key_path = key.rstrip('/') + "/"
+                script_namespace = key.lower().rstrip('/').split(sep='/')
+                key_parser = script_namespace[-2] + "." + script_namespace[-1]
+                dict_tmp.update(
+                    get_dict_scripts(key_parser, key_path, section))
+
+    return dict_tmp
+
+
+def get_script_header(path_current_script):
+    # read info tag from each script
+    head_info_tag = "#info: "
+    head_use_tag = "#use: "
+    head_arg_tag = "#arg: "
+    head_arginfo_tag = "#arginfo: "
+    head_info = ""
+    head_use = ""
+    head_arg = ""
+    head_arginfo = ""
+    try:
+        # count lines
+        f = open(path_current_script, "r")
+        line_count = 0
+        for line in f:
+            if line != "\n":
+                line_count += 1
+            # read header information
+            if head_use_tag in line:
+                head_use = head_use + line.lstrip(
+                    head_use_tag).rstrip(
+                    '\n')
+            if head_info_tag in line:
+                head_info = head_info + line.lstrip(
+                    head_info_tag).rstrip('\n')
+            if head_arg_tag in line:
+                head_arg = head_arg + line.lstrip(
+                    head_arg_tag).rstrip('\n')
+            if head_arginfo_tag in line:
+                head_arginfo = head_arginfo + line.lstrip(
+                    head_arginfo_tag).rstrip('\n')
+            # stop counting after a few lines, for speed
+            if line_count == 8:
+                break
+        f.close()
+    except FileNotFoundError:
+        pass
+
+    # help text
+    if head_arg == "":
+        help_text = head_info
+    else:
+        # variable parameter
+        if "<" and ">" in head_arg:
+            help_text = head_info + " VARIABLE PARAMETER: " + \
+                        head_arg + " - " + head_arginfo
+        # fixed parameter
+        else:
+            help_text = head_info + " FIXED PARAMETER: " + \
+                        "'" + head_arg + "' - " + head_arginfo
+
+    return help_text
+
+
+def add_subparsers(dictionary):
+    already_done_subparsers = []
+
+    for key in dictionary.items():
+        key_command = key[1][0]
+        key_path = key[1][2]
+        key_type = key[1][5]
+        # key_script = key[1][3]  # todo: unused
+        # key_category = key[1][5]  # todo: unused
+
+        # load help text
+        if key_type == 'tasks-from-roles':
+            key_firstparser_help = key_path.replace('/tasks/', '/') + "ww.txt"
+        elif key_type == 'galaxy-playbooks':
+            key_firstparser_help = key_path.replace('/playbooks/',
+                                                    '/') + "ww.txt"
+        else:
+            key_firstparser_help = key_path + "ww.txt"
+        # default help text
+        # todo: replace with better search
+        # text_help = "Please add a help file to " + key_firstparser_help
+
+        try:
+            with open(key_firstparser_help, "r") as f:
+                text_help = f.read()
+        except FileNotFoundError:
+            text_help = key_type
+
+        # add first parser
+        if key_command not in already_done_subparsers:
+            already_done_subparsers.append(key_command)
+            current_parser = subparsers.add_parser(key_command, help=text_help)
+
+            # add empty second_parser
+            sub_parser = current_parser.add_subparsers(dest="command_sub")
+
+            # add the following arguments to all folder based subparser
+            current_parser.add_argument(
+                "-b", "--become",
+                help="Run as superuser.",
+                action='store_true',
+            )
+
+            # add second parser
+            for key2 in dictionary.items():
+                key_id = key2[0]
+                if key_command + "---" in key_id:
+                    key_sub_command = key2[1][1]
+                    key_secondparser_help = key2[1][4]
+                    sub_parser.add_parser(key_sub_command,
+                                          help=key_secondparser_help)
+
+
+# PARSER INIT #################################################################
+
+# first start
+if not os.path.isfile(file_ansible_cfg):
+    # add default ansible config
+    file_ansible_cfg_default = path_appdata + 'ansible_default.cfg'
+    os.system('cp -u ' + file_ansible_cfg_default + ' ' + file_ansible_cfg)
+if not os.path.isfile(file_ww_cfg):
+    # add default ww config
+    file_ww_cfg_default = path_appdata + 'ww_default.cfg'
+    os.system('cp -u ' + file_ww_cfg_default + ' ' + file_ww_cfg)
+
+# symlink to local ansible.cfg
+if not os.path.isfile(file_ansible_cfg_local):
+    os.symlink(file_ansible_cfg, file_ansible_cfg_local)
+
+# create basic directorie structure
+if not os.path.isdir(path_cache):
+    os.makedirs(path_cache)
+if not os.path.isdir(path_inventory):
+    os.makedirs(path_inventory)
+if not os.path.isdir(path_inventorymaker_src):
+    os.makedirs(path_inventorymaker_src)
+if not os.path.isdir(path_worklists):
+    os.makedirs(path_worklists)
+if not os.path.isdir(path_repo):
+    os.makedirs(path_repo)
+if not os.path.isdir(path_playbooks):
+    os.makedirs(path_playbooks)
+if not os.path.isdir(path_logs):
+    os.makedirs(path_logs)
+if not os.path.isdir(path_reports):
+    os.makedirs(path_reports)
+if not os.path.isdir(path_tmp):
+    os.makedirs(path_tmp)
+
+# set main parser
+parser = argparse.ArgumentParser(description="Cluster and cloud management \
+                                   toolkit build upon Ansible. \
+                                   Useful if you work on specific parts of a \
+                                   cluster or groups of virtual machines. \
+                                   Written by Bodo Endres.")
+
+# designate the target variable for the main parser,
+# which is the main applications file name
+subparsers = parser.add_subparsers(dest="command")
+
+# all arguments and subparsers from here:
+
+parser.add_argument(
+    "-t", "--target",
+    help="Ansible inventory host(s). \
+    Several targets need to be comma separated. For example: \
+    'ww -t node100-1,node100-2 servermonkey.ww info_test'.",
+    metavar='HOST',
+    type=str,
+)
+parser.add_argument(
+    "-d", "--dryrun",
+    help="Simulate the Ansible run.",
+    action='store_true',
+)
+parser.add_argument(
+    "-f", "--format",
+    help="Pipe and redirect friendly output. \
+    No hidden special characters or colors in output.",
+    action='store_true',
+)
+parser.add_argument(
+    "-c", "--cachelogs",
+    help="Only read from the previous log cache without creating a new. \
+    This will entirely skip any Ansible steps. Useful if your cache is \
+    relatively new and you want to speed things up.",
+    action='store_true',
+)
+parser.add_argument(
+    "-n", "--notify",
+    help="Play a notification sound when done.",
+    action='store_true',
+)
+parser.add_argument(
+    "-v", "--verbose",
+    help="Get extra information. Useful if you have to iterate over lots of \
+    targets. -v is recommendet for users, -vv is basic debugging, \
+    -vvv and -vvvv is for full debugging.",
+    action='count'
+)
+parser.add_argument(
+    "-w", "--watch",
+    help="Repeat the same command and watch the output. In seconds.",
+    metavar='SECONDS',
+    # nargs='?',
+    type=int,
+    # default=60,
+)
+parser.add_argument(
+    "-x", "--export",
+    help="Save the script output to a colorful HTML file. Will be saved to \
+    .ww/reports. Only works with roles 'servermonkey.sh' and \
+    'servermonkey.ww_logger'.",
+    action='store_true',
+)
+
+# # GET
+# parser_get = subparsers.add_parser(
+#     "get",
+#     help="List the currently selected worklist, the content of the worklist \
+#     and custom scripts.",
+# )
+#
+# # SET
+# parser_set = subparsers.add_parser(
+#     "set",
+#     help="Set the worklist to be used during your project. For example run \
+#     'ww set myworklist'. \
+#     To avoid clutter this will only use files from the 'worklist' directory \
+#     inside the main ww folder.",
+# )
+# # SET arguments
+# parser_set.add_argument(
+#     "WORKLIST_FILE",
+#     help="An existing worklist file from the worklist folder. \
+#     For a new worklist just choose a new name, like 'myproject'.",
+#     type=str,
+# )
+#
+# # ED
+# parser_ed = subparsers.add_parser(
+#     "ed",
+#     help="Edit the current worklist. Add any host defined in the \
+#         inventory/*.ini files. You can use 'localhost' as well."
+# )
+#
+# # RM
+# parser_rm = subparsers.add_parser(
+#     "rm",
+#     help="Delete a worklist completely.",
+# )
+# # RM arguments
+# parser_rm.add_argument(
+#     "WORKLIST_FILE",
+#     help="An existing worklist file, from the worklist folder, \
+#     that you want to delete.",
+#     type=str,
+# )
+
+# EDIN (edit inventory)
+parser_edin = subparsers.add_parser(
+    "edin",
+    help="Edit the inventory file of Inventorymaker with Visidata."
+)
+
+parser_gen = subparsers.add_parser(
+    "gen",
+    help="Regenerate Inventorymaker inventory file."
+)
+
+# EXE
+parser_exe = subparsers.add_parser(
+    "exe",
+    help="Directly execute a shell command. \
+    Will execute with the default sh shell on the target system.",
+)
+# EXE arguments
+parser_exe.add_argument(
+    "-b", "--become",
+    help="Run as superuser.",
+    action='store_true',
+)
+parser_exe.add_argument(
+    "SHELL_COMMAND",
+    help="Directly execute a shell command. \
+    Will execute with the default sh shell on the target system.",
+    type=str,
+)
+
+# Add all subparsers
+dict_cfg = load_cfg()
+add_subparsers(dict_cfg)
+
+# init TAB complete and parsers
+argcomplete.autocomplete(parser)
+args = parser.parse_args()
+
+# exit if there are no commands at all
+if not args.command:
+    parser.parse_args(["--help"])
+
+# LIBRARIES ###################################################################
+
+import time
+import uuid
+from ansible.parsing.dataloader import DataLoader
+from ansible.inventory.manager import InventoryManager
+
+# STATIC VARIABLES BASIC ######################################################
+
+# init print with color
+col_end = "\x1b[0m"  # stop printing with color
+col_host = "\x1b[1;37;44m"  # bold white on blue
+col_debug_vv = "\x1b[0;32;40m"  # green on black
+col_debug_vvv = "\x1b[0;34;40m"  # blue on black
+col_debug_vvvv = "\x1b[0;35;40m"  # purple on black
+col_ansible = "\x1b[0;32;40m"  # green on black
+
+col_white = "\x1b[0;37;40m"  # and bold
+col_blue = "\x1b[7;34;40m"
+col_yellow = "\x1b[7;33;40m"
+col_red = "\x1b[7;31;40m"
+col_green = "\x1b[7;32;40m"
+col_cyan = "\x1b[7;36;40m"
+
+
+# FUNCTIONS BASIC #############################################################
+
+def printv(text):
+    if args.verbose and args.verbose >= 1:
+        print(text)
+
+
+def printvv(text):
+    if args.verbose and args.verbose >= 2:
+        print(col_debug_vv + text + col_end)
+
+
+def printvvv(text):
+    if args.verbose and args.verbose >= 3:
+        print(col_debug_vvv + text + col_end)
+
+
+def printvvvv(text):
+    if args.verbose and args.verbose >= 4:
+        print(col_debug_vvvv + "   " + text + col_end)
+
+
+def tmp_id(prefix="_", suffix=".ini"):
+    unique_id = str(uuid.uuid4())[:8]
+    return prefix + unique_id + suffix
+
+
+# STATIC VARIABLES ############################################################
+
+# cache
+cache_worklist = path_cache + "worklist.ini"
+cache_inv_all = path_cache + "inv_all" + tmp_id()
+cache_inv_nodes = path_cache + "inv_nodes" + tmp_id()
+cache_inv_nodes_from_racks = path_cache + "inv_nodes_from_racks" + tmp_id()
+cache_inv_racks = path_cache + "inv_racks" + tmp_id()
+cache_inv_server_groups = path_cache + "inv_server_groups" + tmp_id()
+cache_inv_servers = path_cache + "inv_servers" + tmp_id()
+cache_inv_fqdns = path_cache + "inv_fqdns" + tmp_id()
+
+
+# FUNCTIONS ###################################################################
+
+
+def db_exist(file):
+    try:
+        f = open(file, "r")
+        f.close()
+        printvvvv("DB_EXIST: OK " + file)
+        return True
+    except FileNotFoundError:
+        printvvvv("DB_EXIST: OK no file " + file)
+        return False
+    except Exception as error:
+        print("DB_EXIST ERROR: " + file + " " + str(error))
+        exit_clean(1)
+
+
+def db_mustload(file):
+    try:
+        f = open(file, "r")
+        data = f.read()
+        printvvvv("DB_MUSTLOAD: OK " + file)
+        return data
+    except FileNotFoundError:
+        printvvvv("DB_MUSTLOAD ERROR: File not found" + file)
+        exit_clean(1)
+    except Exception as error:
+        print("DB_MUSTLOAD ERROR: " + file + " " + str(error))
+        exit_clean(1)
+
+
+def db_tryload(file):
+    try:
+        f = open(file, "r")
+        data = f.read()
+        printvvvv("DB_TRYLOAD: OK " + file)
+        return data
+    except FileNotFoundError:
+        printvvvv("DB_TRYLOAD: No file, skipping " + file)
+        return False
+    except Exception as error:
+        print("DB_TRYLOAD ERROR: " + file + " " + str(error))
+        exit_clean(1)
+
+
+def db_delete(file):
+    try:
+        os.remove(file)
+        printvvvv("DB_DELETE: OK " + file)
+    except FileNotFoundError:
+        printvvvv("DB_DELETE: already deleted " + file)
+    except Exception as error:
+        print("DB_DELETE ERROR: " + file + " " + str(error))
+        exit_clean(1)
+
+
+def db_touch(file):
+    try:
+        f = open(file, "a")
+        f.close()
+        printvvvv("DB_TOUCH : OK " + file)
+    except Exception as error:
+        print("DB_TOUCH ERROR: " + file + " " + str(error))
+        exit_clean(1)
+
+
+def db_append(file, line):
+    try:
+        f = open(file, "a")
+        f.write(line + '\n')
+        f.close()
+        printvvvv("DB_APPEND: OK " + file + "  WITH:  " + line)
+    except Exception as error:
+        print("DB_APPEND ERROR: " + file + " " + str(error))
+        exit_clean(1)
+
+
+def exit_clean(error_nr=0):
+    printvv("exit_clean(" + str(error_nr) + ")")
+
+    # get inventory
+    inventory_cache = inventory_get()
+
+    # delete inventory
+    for i in range(len(inventory_cache)):
+        # create empty files, easier to handle than no files
+        db_delete(inventory_cache[i])
+
+    # play notification sound
+    if args.notify:
+        try:
+            os.system("aplay -q " + path_appdata + "notification.wav &")
+        except Exception as error:
+            print("NOTIFICATION ERROR: " + str(error))
+
+    exit(error_nr)
+
+
+def cache_get(cache_file):
+    printvv("cache_get(" + cache_file + ")")
+    # check which nodes to use
+    cache_data = []
+    try:
+        f = open(cache_file, "r")
+        for line in f:
+            cache_data.append(line.rstrip('\n'))
+        f.close()
+    except FileNotFoundError:
+        pass
+    except Exception as error:
+        print("ERROR: " + str(error))
+        exit_clean(1)
+    return cache_data
+
+
+def inventory_get():
+    printvv("inventory_get()")
+    inventory_cache = [cache_inv_all,
+                       cache_inv_nodes,
+                       cache_inv_nodes_from_racks,
+                       cache_inv_racks,
+                       cache_inv_server_groups,
+                       cache_inv_servers,
+                       cache_inv_fqdns,
+                       ]
+
+    return inventory_cache
+
+
+def lookup_targets():
+    data_loader = DataLoader()
+    inventory = InventoryManager(loader=data_loader,
+                                 sources=[file_inventory_server])
+
+    all_hosts = []
+
+    invent = db_mustload(file_inventory_server)
+
+    inv_all = []
+    if ':' in args.target:
+        inv_all = args.target.split(':')
+    elif ',' in args.target:
+        inv_all = args.target.split(',')
+    else:
+        inv_all.append(str(args.target))
+    printvvv("Targets in : " + str(inv_all))
+
+    # make all input lowercase
+    for i in range(len(inv_all)):
+        inv_all[i] = inv_all[i].lower()
+        # remove excludet targets
+        if inv_all[i].startswith('!'):
+            del inv_all[i]
+
+    # parse targets input string
+    for i in inv_all:
+        try:
+            # parse group
+            list_group_hosts = inventory.get_groups_dict()[i]
+            for j in list_group_hosts:
+                # don't add duplicates
+                if j not in all_hosts and i in invent:
+                    all_hosts.append(j.lower())
+        # if item not a group, add as single host
+        except KeyError:
+            # don't add duplicates
+            if i not in all_hosts and i in invent:
+                all_hosts.append(i.lower())
+
+    printvvv("Targets out: " + str(all_hosts))
+    return all_hosts
+
+
+def load_worklist():
+    printvv("load_worklist()")
+    # remove line breaks and spaces
+    worklist = db_mustload(cache_worklist).rstrip('\n')
+    return worklist
+
+
+def load_worklist_content():
+    printvv("load_worklist_content()")
+    # use custom targets instead of a worklist
+    if args.target:
+        custom_targets = args.target.lower()
+        custom_targets = custom_targets.split(sep=',')
+        return custom_targets
+    # use the current worklist
+    else:
+        worklist = load_worklist()
+
+    try:
+        f = open(path_worklists + worklist, "r")
+        worklist_content = []
+        # for each line add target
+        for line in f:
+            # don't add empty lines
+            if line != '\n':
+                # don't add lines with any comments whatsoever
+                if '#' not in line:
+                    # add all hosts with a proper name
+                    # remove line breaks and useless spaces on the right
+                    host_clean = line.rstrip('\n').rstrip()
+                    # make line lowercase
+                    host_clean = host_clean.lower()
+                    # remove everything after the first space
+                    host_clean = host_clean.split(" ", 1)[0]
+                    # append
+                    worklist_content.append(host_clean)
+        f.close()
+        return worklist_content
+    except FileNotFoundError:
+        print("LOAD_WORKLIST_CONTENT ERROR: The worklist " + worklist +
+              " does not exist.")
+        exit_clean(1)
+    except Exception as error:
+        print("LOAD_WORKLIST_CONTENT ERROR: " + str(error))
+        exit_clean(1)
+
+
+def divider():
+    # get the terminal size
+    rows, columns = os.popen('stty size', 'r').read().split()
+    # draw a line over the whole terminal, needs a UTF-8 character set
+    print("━" * int(columns))
+
+
+def ansible():
+    printvv("ansible()")
+
+    # get all log files with ansible
+    if not args.cachelogs:
+
+        # delete old ansible log
+        db_delete(path_cache + "ansible.log")
+
+        # todo
+        # hosts = db_tryload(cache_inv_all)
+        #
+        # # throw error if hosts variable is empty
+        # if not hosts:
+        #     print("There are no hosts defined.")
+        #     exit_clean(1)
+        #
+        # ansible_hosts = hosts.replace('\n', ',')
+        # # remove last comma
+        # ansible_hosts = ansible_hosts.rstrip(',')
+
+        # make Ansible / Anstomlog more verbose
+        callback_plugin = ''
+        if args.verbose:
+            callback_plugin = "ANSIBLE_STDOUT_CALLBACK=anstomlog "
+
+        dry_run = ''
+        if args.dryrun:
+            dry_run = ' --check'
+
+        run_as_root = ''
+        if args.become:
+            run_as_root = ' -b'
+
+        # exe
+        if args.command == 'exe':
+            args_command_sub = 'exe'
+            # ansible variables
+            ww_path = path_playbooks
+            ww_script = "shell_command.sh"
+            ww_category = ""
+            ww_script_type = "sh"
+        else:
+            args_command_sub = args.command_sub
+            # ansible variables
+            current_play = dict_cfg.get(
+                args.command + "---" + args_command_sub)
+            ww_path = current_play[2]
+            ww_script = current_play[3]
+            ww_category = current_play[5]
+            ww_script_type = current_play[6]
+            printvvv('current_play is ' + str(current_play))
+
+        printvvv('ww_category is ' + ww_category)
+
+        ww_logfile = '_' + args.command + '_' + args_command_sub + ".ini"
+        extra_vars = 'ww=' + path_cfg + \
+                     ' ww_logbase=' + path_logs + \
+                     ' ww_logfile=' + ww_logfile
+        path_workdir = ''
+        playbook = ''
+
+        if ww_category in ('role', 'galaxy-roles'):
+            path_workdir = path_playbooks
+            playbook = "run_role.yml"
+            extra_vars += ' ww_role=' + args.command + "." + args_command_sub
+
+        elif ww_category == "tasks-from-roles":
+            path_workdir = path_playbooks
+            playbook = "run_task.yml"
+            extra_vars += ' ww_role=' + args.command
+            extra_vars += ' ww_script=' + args_command_sub
+
+        elif ww_category in ('galaxy-playbooks', 'playbooks-and-scripts'):
+            path_workdir = ww_path
+            playbook = ww_script
+
+        # override if shellscript
+        if ww_script_type == "sh":
+            path_workdir = path_playbooks
+            # automatically detect sh scripts that shall run as root
+            if db_exist(ww_path + ww_script):
+                f = open(ww_path + ww_script, "r")
+                line_count = 0
+                for line in f:
+                    if line != "\n":
+                        line_count += 1
+                    if "#autoroot" in line:
+                        run_as_root = ' -b'
+                        printvvv("Autodetected running script as root")
+                    # stop counting after a few lines for speed
+                    if line_count == 10:
+                        break
+                f.close()
+            playbook = "run_sh.yml"
+            extra_vars += ' ww_path=' + ww_path
+            extra_vars += ' ww_script=' + ww_script
+
+        # easier to use relative paths
+        try:
+            os.chdir(path_workdir)
+            printvvv("chdir to " + path_workdir)
+        except Exception as error:
+            print("ERROR: os.chdir(path_workdir) " + str(error))
+            exit_clean(1)
+
+        # new
+        cmd = callback_plugin + \
+              'ansible-playbook ' + \
+              playbook + \
+              ' -l ' + str(args.target).lower() + \
+              run_as_root + \
+              dry_run + \
+              ' -e "' + extra_vars + '"'
+
+        printvvv("Running Shell command:")
+        printvvv(cmd)
+        printvvv("")
+        try:
+            os.system(cmd)
+            print("")
+        except Exception as error:
+            print("ERROR os.system(cmd): " + str(error))
+            exit_clean(1)
+
+
+def ansible_and_log():
+    printvv("ansible_and_log()")
+
+    # exe
+    if args.command == 'exe':
+        args_command_sub = 'exe'
+    else:
+        args_command_sub = args.command_sub
+
+    # file names
+    file_name = args.command + "_" + args_command_sub
+    report_out = path_reports + '/' + file_name + '.html'
+
+    # HTML output temp file
+    tmp = path_tmp + "tmp_for_html_" + file_name
+
+    # todo
+    # build new chache, does not work with group targets
+    # load ry from cache
+    # inv_all = cache_get(cache_inv_all)
+    # inv_all = os.listdir(path_logs)
+    inv_all = lookup_targets()
+
+    # delete old log files
+    if not args.cachelogs:
+        printvvv("Delete old logs")
+        for j in inv_all:
+            target_log = path_logs + j + "_" + file_name + '.ini'
+            db_delete(target_log)
+
+        # run ansible
+        ansible()
+
+    # print a title when in watch mode
+    if args.watch:
+        # clear screen before displaying
+        if not args.verbose:
+            os.system('clear')
+        print("")
+        print(' ' + args.command.capitalize() + ' ' +
+              args_command_sub.capitalize())
+        divider()
+
+    # load log files
+    for i in inv_all:
+        target_log = path_logs + i + "_" + file_name + '.ini'
+        log_content = db_tryload(target_log)
+
+        # only print if there is a log file
+        if log_content:
+            # add linefeed if there is none
+            if not log_content.endswith('\n'):
+                log_content = log_content + '\n'
+
+            # prevent special character bugs
+            log_content = log_content.replace("\"", "\'")
+            # todo: not needet anymore? # log_content = log_content.replace("%", "%%")
+
+            # print title/hostname in capital letters
+            title = i.split('_', 1)[0].upper()
+
+            # print as list or normal
+            with open(target_log, 'r') as k:
+                for count_lines, line in enumerate(k):
+                    pass
+
+            # base print command as list
+            shell_command_list = 'printf %s "' + title.ljust(12) + log_content
+            shell_command_normal = 'printf %s "' + log_content + '\n'
+
+            # select the formatter for the output
+            formatter = ''
+            if not args.format:
+                formatter = ' | ccze -A'
+
+            # print as list
+            if not count_lines > 0:
+                os.system(shell_command_list + '"' + formatter)
+
+            # print as normal
+            else:
+                print(col_host + title + col_end)
+                os.system(shell_command_normal + '"' + formatter)
+
+            # if html is enabled, output to temp file, for later use below
+            if args.export:
+
+                # export as list
+                if not count_lines > 0:
+                    os.system(shell_command_list + '" >> ' + tmp)
+
+                # export as normal
+                else:
+                    os.system('printf %s "' + title + '\n" >> ' + tmp)
+                    os.system(shell_command_normal + '" >> ' + tmp)
+
+    # delete old report
+    try:
+        os.remove(report_out)
+    except FileNotFoundError:
+        pass
+
+    # aggregate output into one HTML file
+    if args.export and os.path.isfile(tmp):
+        try:
+            os.system(
+                'cat ' + tmp +
+                ' | ccze -h' +
+                ' | sed "s/10pt courier/12pt mono/g"' +
+                ' | sed "s/Log colorisation generated by ccze 0.2.1/' +
+                file_name + '/g" > ' +
+                report_out)
+        except Exception as error:
+            print("Can't write HTML output file!")
+            print("ERROR: " + str(error))
+        os.remove(tmp)
+
+
+def cmd_get():
+    # print all worklists and sort
+    print("Worklists are:")
+    divider()
+    all_worklists = os.listdir(path_worklists)
+    all_worklists.sort()
+    for i in all_worklists:
+        print(i)
+    print("")
+
+    # print current worklist
+    print("Current worklist is:")
+    divider()
+    print(col_host + load_worklist() + col_end)
+    print("With targets:")
+    worklist_content = load_worklist_content()
+    for i in worklist_content:
+        print(i)
+
+
+def cmd_set():
+    worklist = str(args.WORKLIST_FILE)
+
+    if '/' in worklist:
+        worklist = os.path.basename(worklist)
+
+    db_delete(cache_worklist)
+    db_append(cache_worklist, worklist)
+    print("Worklist set to: " + worklist)
+
+
+def cmd_ed():
+    os.system("editor " + path_worklists + load_worklist())
+
+
+def cmd_gen():
+    os.remove(file_inventory_server)
+    load_cfg()
+
+
+def cmd_edin():
+    # init the ini parser and allow single string keys
+    config = configparser.ConfigParser(allow_no_value=True)
+    config.optionxform = lambda option: option
+    # read the ww.cfg file
+    config.read(file_ww_cfg)
+    # find sections
+    config.sections()
+    # for each section
+    for section in config.sections():
+        # for each role_namespace
+        for key in config[section]:
+            # settings
+            if section == 'settings':
+                for sub_key, value in config.items('settings'):
+                    # inventorymaker is used
+                    if sub_key == 'inventorymaker_src':
+                        # load settings
+                        if value.lower() == 'default':
+                            path_source = path_inventorymaker_src
+                        else:
+                            path_source = str(value)
+                        # start visidata CSV editor
+                        os.system("cd " + path_source +
+                                  " && visidata . --fancy-chooser=1")
+                    else:
+                        print("No inventory source defined in config")
+
+
+def cmd_rm():
+    worklist = str(args.WORKLIST_FILE)
+    worklist_to_rm = os.path.basename(worklist)
+    # remove the current worklist
+    try:
+        os.remove(path_worklists + worklist_to_rm)
+        print("Worklist " + worklist_to_rm + " deleted.")
+    except FileNotFoundError:
+        print("There is no worklist with that name.")
+    except Exception as error:
+        print("CMD_RM ERROR: " + str(error))
+        exit_clean(1)
+
+    # only reset the worklist to temp if the current worklist and
+    # the worklist to delete, are the same
+    current_worklist = load_worklist()
+    if worklist_to_rm == current_worklist:
+        # reset to default workfile and clean up
+        file_temp = 'temp'
+        # delete the old worklist cache
+        db_delete(cache_worklist)
+        # also delete the temp file to prevent accidents
+        db_delete(path_worklists + file_temp)
+        # create a new temp file
+        db_touch(path_worklists + file_temp)
+        # add the new temp worklist to the cache
+        db_append(cache_worklist, file_temp)
+        print("Resetting worklist to " + file_temp + " to avoid accidents.")
+
+
+def cmd_exe():
+    # path variables
+    shell_command = args.SHELL_COMMAND
+
+    tmp_script = "shell_command.sh"
+    cache_shell_code = path_playbooks + tmp_script
+    db_delete(cache_shell_code)
+    db_append(cache_shell_code, '#!/bin/sh')
+    db_append(cache_shell_code, shell_command)
+    printvvv("Command is: " + shell_command)
+
+    ansible_and_log()
+
+    db_delete(cache_shell_code)
+
+
+def cmd_exe_sub():
+    # show help if there is no script parameter
+    if not args.command_sub:
+        os.system(app + " " + args.command + " -h")
+        exit_clean()
+
+    ansible_and_log()
+
+
+def program_selector():
+    # start measuring how much time it takes to execute a program
+    start_time = time.time()
+
+    # commands
+    case = args.command
+    if case == "get":
+        cmd_get()
+    elif case == "set":
+        cmd_set()
+    elif case == "ed":
+        cmd_ed()
+    elif case == "edin":
+        cmd_edin()
+    elif case == "gen":
+        cmd_gen()
+    elif case == "rm":
+        cmd_rm()
+    elif case == "exe":
+        cmd_exe()
+    else:
+        cmd_exe_sub()
+
+    # show how much time it took to execute a program
+    execution_time = str(round(time.time() - start_time, 1))
+    printv('')
+    printv("Took " + execution_time + " seconds")
+
+
+def main():
+    # Argparse debug information
+    printvvv("Argparse " + str(parser.parse_args()))
+    printvvv("VARS: app=" + app + ", app_name=" + app_name + ", path_app=" +
+             path_app + ", path_home=" + path_home + ", path_cfg=" + path_cfg)
+    printvvv("")
+
+    # loop command
+    if args.watch:
+        while args.watch:
+            program_selector()
+            time.sleep(args.watch)
+    # run command only once
+    else:
+        program_selector()
+
+    # quit and remove used cache
+    exit_clean()
+
+
+# MAIN ########################################################################
+
+main()
+
+# todo
+# cleanup .ansible_async and .ww/cache/temp when not used in 8 hours
+# encrypt inventory passwords, but find a fast way, run once only

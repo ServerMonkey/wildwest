@@ -1,0 +1,16 @@
+#!/bin/sh
+
+PATH_SEARCH="$HOME/.ww/cache/facts"
+
+VAR_HOSTNAME=$1
+VAR_SEARCH=$2
+
+for f in "$PATH_SEARCH"/*; do
+    [ -e "$f" ] || continue
+    if echo "$f" | grep -q "$VAR_HOSTNAME"; then
+        OUT_HOSTNAME=$(basename "$f")
+        OUT_GREP=$(grep -i "$VAR_SEARCH" "$f" |
+            sed -e 's/",//g' -e 's/"//g' -e 's/^[ \t]*//')
+        printf '%s \t%s\n' "$OUT_HOSTNAME" "$OUT_GREP"
+    fi
+done
