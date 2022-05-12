@@ -1,0 +1,104 @@
+#!/bin/sh
+
+# run from anywhere
+APP_DIR_FULL=$(realpath "$0")
+APP_DIR=$(dirname "$APP_DIR_FULL")
+cd "$APP_DIR" || exit 1
+
+# automatic increase minor version number whith each build
+VERSION_FILE="version"
+VERSION_MAJOR=$(sed -n '1p' $VERSION_FILE)
+VERSION_MINOR=$(sed -n '2p' $VERSION_FILE)
+VERSION_MINOR_NEW=$((1 + VERSION_MINOR))
+sed -i "2 s/$VERSION_MINOR\$/$VERSION_MINOR_NEW/g" $VERSION_FILE
+VERSION="$VERSION_MAJOR.$VERSION_MINOR_NEW"
+
+# variables
+NAME="wildwest"
+RELEASES="releases"
+TARGET="DEBIAN"
+PATH_BASE="./$RELEASES/$NAME-$VERSION"
+PATH_INSTALL="$PATH_BASE/usr/local"
+PATH_BIN="$PATH_INSTALL/bin"
+PATH_SHARE="$PATH_INSTALL/share/$NAME"
+PATH_TARGET="$PATH_BASE/$TARGET"
+
+# delete the old build
+echo "Cleaning up old build"
+rm -rf "$PATH_BASE"
+
+# copy relevant files from source to release
+echo "Copying relevant source files"
+
+# common shared
+mkdir -p "$PATH_SHARE"
+cp -t "$PATH_SHARE" "README.md" "copyright" "ansible_default.cfg" \
+"ww_default.cfg" "notification.wav" || exit 1
+
+# playbooks
+cp -r "playbooks" "$PATH_SHARE" || exit 1
+
+# plugins
+PATH_ANSPLUG="$PATH_SHARE/ansible-plugins"
+mkdir -p "$PATH_ANSPLUG"
+cp -r "ansible-plugins/ww-anstomlog-mod" "$PATH_ANSPLUG" || exit 1
+cp -r "ansible-plugins/ww-mitogen" "$PATH_ANSPLUG" || exit 1
+
+# binarys
+mkdir -p "$PATH_BIN"
+cp -t "$PATH_BIN" "ww" || exit 1
+cp -t "$PATH_BIN" "ww-verify" || exit 1
+cp -t "$PATH_BIN" "ww-facts" || exit 1
+chmod 0755 "ww" "ww-verify" "ww-facts"
+
+# create Debian control file
+echo "Creating CONTROL file"
+mkdir -p "$PATH_TARGET"
+echo "Package: $NAME
+Version: $VERSION
+Section: net
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.0),
+ python3-argcomplete (>=1.8.1),
+ ansible (>= 2.7.7),
+ sshpass (>= 1.06),
+ ccze (>=0.2.1)
+Recommends: visidata,
+ ipmitool (>=1.8.18),
+ pass (>=1.7.3),
+ gpg-agent (>=2.2.27),
+ pinentry-curses (>=1.1.0),
+ ansible-lint (>=4.1.0),
+ usbprep,
+ inventorymaker
+Suggests: graphviz (>=2.40.1),
+ ipmiview,
+ hpilo-perl-control
+Maintainer: Bodo Endres <dev@muspekaren.se>
+Description: Cluster and cloud management toolkit build upon Ansible.
+" >"$PATH_TARGET/control"
+
+# build
+echo "Building"
+fakeroot dpkg-deb --build "$PATH_BASE"
+
+# pack source files
+echo "Packing source"
+zip -q -r "$RELEASES/$NAME-$VERSION.source.zip" ./* \
+    -x $RELEASES\* \
+    -x .*\* \
+    -x ./*DEV_\*
+wait
+
+# replace latest version
+cp "$PATH_BASE.deb" "$RELEASES/$NAME-LATEST.deb"
+cp "$PATH_BASE.source.zip" "$RELEASES/$NAME-LATEST-source.zip"
+
+# clean up
+echo "Clean up"
+rm -rf "$PATH_BASE"
+
+# check
+echo "Checking:"
+lintian -c "$PATH_BASE.deb"

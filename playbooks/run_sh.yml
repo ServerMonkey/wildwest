@@ -1,0 +1,25 @@
+---
+#info: Executes a shellscript as Ansible playbook and writes a log file
+- hosts: all
+  gather_facts: no
+  tasks:
+
+  - name: Script {{ ww_script }}
+    script: '{{ ww_path }}{{ ww_script }}'
+    register: ww_log
+
+  - name: Save log file
+    local_action:
+      module: copy
+      content: '{{ ww_log.stdout }}'
+      dest: '{{ ww_logbase }}{{ inventory_hostname }}{{ ww_logfile }}'
+      mode: 0644
+    when: ww_log.stdout != ""
+    delegate_to: localhost
+    changed_when: false
+    become: false
+
+  - name: Display log
+    debug:
+      var: ww_log.stdout_lines
+    when: ww_log.stdout != ""

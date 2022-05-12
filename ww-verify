@@ -1,0 +1,19 @@
+#!/bin/sh
+#info: Verify ansible playbooks, tasks and roles
+
+# help
+if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "Verify ansible playbooks, tasks and roles."
+    echo "Usage:"
+    echo " ww-verify <PATH_TO_YML_FILES>"
+    exit 0
+fi
+
+PLAYBOOKS=$(find -L "$1" -name "*.yml")
+
+for line in $PLAYBOOKS; do
+    echo "Testing: $line"
+    # exclude rule 505 to ignore a bug that occures when
+    # using "include_role: name="
+    ansible-lint -x 505 "$line"
+done
