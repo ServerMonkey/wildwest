@@ -15,5 +15,5 @@ for line in $PLAYBOOKS; do
     echo "Testing: $line"
     # exclude rule 505 to ignore a bug that occures when
     # using "include_role: name="
-    ansible-lint -x 505 "$line"
+    ansible-lint -x 505,106 "$line"
 done

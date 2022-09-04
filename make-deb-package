@@ -62,6 +62,7 @@ Architecture: all
 Depends: python3 (>= 3.0),
  python3-argcomplete (>=1.8.1),
  ansible (>= 2.7.7),
+ ansible-mitogen (>= 0.3),
  sshpass (>= 1.06),
  ccze (>=0.2.1)
 Recommends: visidata,

@@ -9,6 +9,7 @@ import argcomplete
 import configparser
 import os
 import subprocess
+import re
 
 # NEVER RUN AS ROOT ###########################################################
 
@@ -30,6 +31,7 @@ file_ww_cfg = path_cfg + "ww.cfg"
 # pathes global
 path_appdata = "/usr/local/share/wildwest/"
 path_plugins_os = path_appdata + "ansible-plugins/"
+path_playbooks_share = path_appdata + "playbooks"
 
 # pathes galaxy
 path_ansible = path_home + "/.ansible/"
@@ -45,7 +47,7 @@ path_cache = path_cfg + "cache/"
 path_worklists = path_cfg + "worklists/"
 path_repo = path_cfg + "repo/"
 path_logs = path_cache + "logs/"
-path_tmp = "/tmp/" + app_name + "/"
+path_export = path_cache + "temp_export/"
 file_ansible_cfg = path_cfg + "ansible.cfg"
 file_ansible_cfg_local = path_home + '/.ansible.cfg'
 
@@ -325,21 +327,9 @@ def add_subparsers(dictionary):
 
 # PARSER INIT #################################################################
 
-# first start
-if not os.path.isfile(file_ansible_cfg):
-    # add default ansible config
-    file_ansible_cfg_default = path_appdata + 'ansible_default.cfg'
-    os.system('cp -u ' + file_ansible_cfg_default + ' ' + file_ansible_cfg)
-if not os.path.isfile(file_ww_cfg):
-    # add default ww config
-    file_ww_cfg_default = path_appdata + 'ww_default.cfg'
-    os.system('cp -u ' + file_ww_cfg_default + ' ' + file_ww_cfg)
-
-# symlink to local ansible.cfg
-if not os.path.isfile(file_ansible_cfg_local):
-    os.symlink(file_ansible_cfg, file_ansible_cfg_local)
-
 # create basic directorie structure
+if not os.path.isdir(path_cfg):
+    os.makedirs(path_cfg)
 if not os.path.isdir(path_cache):
     os.makedirs(path_cache)
 if not os.path.isdir(path_inventory):
@@ -350,14 +340,30 @@ if not os.path.isdir(path_worklists):
     os.makedirs(path_worklists)
 if not os.path.isdir(path_repo):
     os.makedirs(path_repo)
-if not os.path.isdir(path_playbooks):
-    os.makedirs(path_playbooks)
 if not os.path.isdir(path_logs):
     os.makedirs(path_logs)
 if not os.path.isdir(path_reports):
     os.makedirs(path_reports)
-if not os.path.isdir(path_tmp):
-    os.makedirs(path_tmp)
+if not os.path.isdir(path_export):
+    os.makedirs(path_export)
+
+# first start
+if not os.path.isfile(file_ansible_cfg):
+    # add default ansible config
+    file_ansible_cfg_default = path_appdata + 'ansible_default.cfg'
+    os.system('cp -u ' + file_ansible_cfg_default + ' ' + file_ansible_cfg)
+if not os.path.isfile(file_ww_cfg):
+    # add default ww config
+    file_ww_cfg_default = path_appdata + 'ww_default.cfg'
+    os.system('cp -u ' + file_ww_cfg_default + ' ' + file_ww_cfg)
+
+# symlink to local playbooks
+if not os.path.isdir(path_playbooks):
+    os.symlink(path_playbooks_share, path_cfg + "playbooks")
+
+# symlink to local ansible.cfg
+if not os.path.isfile(file_ansible_cfg_local):
+    os.symlink(file_ansible_cfg, file_ansible_cfg_local)
 
 # set main parser
 parser = argparse.ArgumentParser(description="Cluster and cloud management \
@@ -393,7 +399,8 @@ parser.add_argument(
 )
 parser.add_argument(
     "-c", "--cachelogs",
-    help="Only read from the previous log cache without creating a new. \
+    help="DISABLED IN THIS BUILD. \
+    Only read from the previous log cache without creating a new. \
     This will entirely skip any Ansible steps. Useful if your cache is \
     relatively new and you want to speed things up.",
     action='store_true',
@@ -499,6 +506,17 @@ parser_exe.add_argument(
     type=str,
 )
 
+# first run
+try:
+    open(file_inventory_server, "r").close()
+except FileNotFoundError:
+    open(file_inventory_server, 'w').close()
+    print("Create empty inventory")
+    exit(0)
+except Exception as first_run_error:
+    print("Init failed: " + str(first_run_error))
+    exit(1)
+
 # Add all subparsers
 dict_cfg = load_cfg()
 add_subparsers(dict_cfg)
@@ -574,6 +592,7 @@ cache_inv_racks = path_cache + "inv_racks" + tmp_id()
 cache_inv_server_groups = path_cache + "inv_server_groups" + tmp_id()
 cache_inv_servers = path_cache + "inv_servers" + tmp_id()
 cache_inv_fqdns = path_cache + "inv_fqdns" + tmp_id()
+cache_ww_logger = path_cache + "ww_logger" + tmp_id()
 
 
 # FUNCTIONS ###################################################################
@@ -688,6 +707,7 @@ def cache_get(cache_file):
     except Exception as error:
         print("ERROR: " + str(error))
         exit_clean(1)
+
     return cache_data
 
 
@@ -713,6 +733,11 @@ def lookup_targets():
     all_hosts = []
 
     invent = db_mustload(file_inventory_server)
+
+    # check if hosts are defined
+    if not args.target:
+        print("Missing target parameter, please define with '-t <HOSTNAME>'")
+        exit_clean(1)
 
     inv_all = []
     if ':' in args.target:
@@ -844,7 +869,7 @@ def ansible():
             ww_path = path_playbooks
             ww_script = "shell_command.sh"
             ww_category = ""
-            ww_script_type = "sh"
+            ww_script_type = "exe"
         else:
             args_command_sub = args.command_sub
             # ansible variables
@@ -858,10 +883,12 @@ def ansible():
 
         printvvv('ww_category is ' + ww_category)
 
-        ww_logfile = '_' + args.command + '_' + args_command_sub + ".ini"
+        # todo: remove
+        # ww_logfile = '_' + args.command + '_' + args_command_sub + ".ini"
+
         extra_vars = 'ww=' + path_cfg + \
-                     ' ww_logbase=' + path_logs + \
-                     ' ww_logfile=' + ww_logfile
+                     ' ww_home=' + path_cfg + \
+                     ' ww_loglist=' + cache_ww_logger
         path_workdir = ''
         playbook = ''
 
@@ -901,6 +928,28 @@ def ansible():
             extra_vars += ' ww_path=' + ww_path
             extra_vars += ' ww_script=' + ww_script
 
+        # override if shellscript run with exe
+        if ww_script_type == "exe":
+            path_workdir = path_playbooks
+            # automatically detect sh scripts that shall run as root
+            if db_exist(ww_path + ww_script):
+                f = open(ww_path + ww_script, "r")
+                line_count = 0
+                for line in f:
+                    if line != "\n":
+                        line_count += 1
+                    if "#autoroot" in line:
+                        run_as_root = ' -b'
+                        printvvv("Autodetected running script as root")
+                    # stop counting after a few lines for speed
+                    if line_count == 10:
+                        break
+                f.close()
+            playbook = "run_sh.yml"
+            extra_vars += ' ww_path=' + ww_path
+            extra_vars += ' ww_script=' + ww_script
+            extra_vars += ' ww_role=' + "exe"
+
         # easier to use relative paths
         try:
             os.chdir(path_workdir)
@@ -929,6 +978,10 @@ def ansible():
             exit_clean(1)
 
 
+def sort_natural(s):
+    return [int(t) if t.isdigit() else t.lower() for t in re.split('(\d+)', s)]
+
+
 def ansible_and_log():
     printvv("ansible_and_log()")
 
@@ -938,26 +991,11 @@ def ansible_and_log():
     else:
         args_command_sub = args.command_sub
 
-    # file names
-    file_name = args.command + "_" + args_command_sub
-    report_out = path_reports + '/' + file_name + '.html'
-
-    # HTML output temp file
-    tmp = path_tmp + "tmp_for_html_" + file_name
-
-    # todo
-    # build new chache, does not work with group targets
-    # load ry from cache
-    # inv_all = cache_get(cache_inv_all)
-    # inv_all = os.listdir(path_logs)
-    inv_all = lookup_targets()
-
     # delete old log files
     if not args.cachelogs:
-        printvvv("Delete old logs")
-        for j in inv_all:
-            target_log = path_logs + j + "_" + file_name + '.ini'
-            db_delete(target_log)
+        printvvv("Delete old log index")
+        db_delete(cache_ww_logger)
+        db_touch(cache_ww_logger)
 
         # run ansible
         ansible()
@@ -972,12 +1010,17 @@ def ansible_and_log():
               args_command_sub.capitalize())
         divider()
 
-    # load log files
-    for i in inv_all:
-        target_log = path_logs + i + "_" + file_name + '.ini'
-        log_content = db_tryload(target_log)
+    # load a list of logs to display
+    ww_logs = cache_get(cache_ww_logger)
+    ww_logs.sort(key=sort_natural)
 
+    # make eaxh export log uniq
+    uniq_export_id = tmp_id()
+
+    # load log files
+    for i in ww_logs:
         # only print if there is a log file
+        log_content = db_tryload(i)
         if log_content:
             # add linefeed if there is none
             if not log_content.endswith('\n'):
@@ -987,16 +1030,22 @@ def ansible_and_log():
             log_content = log_content.replace("\"", "\'")
             # todo: not needet anymore? # log_content = log_content.replace("%", "%%")
 
-            # print title/hostname in capital letters
-            title = i.split('_', 1)[0].upper()
+            # title/hostname in capital letters
+            log_basename = os.path.basename(i)
+            log_hostname = log_basename.split('_', 1)[0].upper()
+
+            # find groupname
+            log_group = log_basename.split('_', 1)[1]
+            log_group = log_group.replace('.sh.ini', '').replace('.ini', '')
 
             # print as list or normal
-            with open(target_log, 'r') as k:
+            with open(i, 'r') as k:
                 for count_lines, line in enumerate(k):
                     pass
 
-            # base print command as list
-            shell_command_list = 'printf %s "' + title.ljust(12) + log_content
+            # show command as list
+            shell_command_list = 'printf %s "' + log_hostname.ljust(
+                16) + log_content
             shell_command_normal = 'printf %s "' + log_content + '\n'
 
             # select the formatter for the output
@@ -1010,11 +1059,12 @@ def ansible_and_log():
 
             # print as normal
             else:
-                print(col_host + title + col_end)
+                print(col_host + log_hostname + col_end)
                 os.system(shell_command_normal + '"' + formatter)
 
             # if html is enabled, output to temp file, for later use below
             if args.export:
+                tmp = path_export + log_group + uniq_export_id
 
                 # export as list
                 if not count_lines > 0:
@@ -1022,37 +1072,49 @@ def ansible_and_log():
 
                 # export as normal
                 else:
-                    os.system('printf %s "' + title + '\n" >> ' + tmp)
+                    os.system('printf %s "' + log_hostname + '\n" >> ' + tmp)
                     os.system(shell_command_normal + '" >> ' + tmp)
 
-    # delete old report
-    try:
-        os.remove(report_out)
-    except FileNotFoundError:
-        pass
+    # aggregate output into similar HTML files
+    if args.export:
+        # delete all old reports
+        for file_report in os.listdir(path_reports):
+            if os.path.isfile(path_reports + file_report) \
+                    and '.html' in file_report:
+                db_delete(path_reports + file_report)
+        # export each group
+        printvvv('exporting to HTML')
+        for m in sorted(os.listdir(path_export)):
+            file_report_in = (path_export + m)
+            file_report_out = path_reports + m + '.html'
+            file_report_out = file_report_out.replace(uniq_export_id, '')
+            # convert to colorful HTML
+            try:
+                os.system(
+                    'cat ' + file_report_in +
+                    ' | ccze -h' +
+                    ' | sed "s/10pt courier/12pt mono/g"' +
+                    ' | sed "s/Log colorisation generated by ccze 0.2.1/' +
+                    m + '/g" > ' +
+                    file_report_out)
+            except Exception as error:
+                print("Can't write HTML output file!")
+                print("ERROR: " + str(error))
 
-    # aggregate output into one HTML file
-    if args.export and os.path.isfile(tmp):
-        try:
-            os.system(
-                'cat ' + tmp +
-                ' | ccze -h' +
-                ' | sed "s/10pt courier/12pt mono/g"' +
-                ' | sed "s/Log colorisation generated by ccze 0.2.1/' +
-                file_name + '/g" > ' +
-                report_out)
-        except Exception as error:
-            print("Can't write HTML output file!")
-            print("ERROR: " + str(error))
-        os.remove(tmp)
+            # cleanup, delete old report
+            db_delete(file_report_in)
+
+    # delete log index
+    if not args.cachelogs:
+        printvvv("Delete log index")
+        db_delete(cache_ww_logger)
 
 
 def cmd_get():
     # print all worklists and sort
     print("Worklists are:")
     divider()
-    all_worklists = os.listdir(path_worklists)
-    all_worklists.sort()
+    all_worklists = sorted(os.listdir(path_worklists))
     for i in all_worklists:
         print(i)
     print("")
@@ -1083,7 +1145,7 @@ def cmd_ed():
 
 
 def cmd_gen():
-    os.remove(file_inventory_server)
+    db_delete(file_inventory_server)
     load_cfg()
 
 
@@ -1098,7 +1160,7 @@ def cmd_edin():
     # for each section
     for section in config.sections():
         # for each role_namespace
-        for key in config[section]:
+        for _ in config[section]:
             # settings
             if section == 'settings':
                 for sub_key, value in config.items('settings'):
@@ -1227,3 +1289,4 @@ main()
 # todo
 # cleanup .ansible_async and .ww/cache/temp when not used in 8 hours
 # encrypt inventory passwords, but find a fast way, run once only
+# cleanup folders: $HOME/.ansible/tmp + ww./cache/logs + ww./cache/logs + ww./cache/temp
