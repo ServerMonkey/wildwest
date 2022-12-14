@@ -75,7 +75,8 @@ Recommends: visidata,
  inventorymaker
 Suggests: graphviz (>=2.40.1),
  ipmiview,
- hpilo-perl-control
+ hpilo-perl-control,
+ dpkg-repack (>=1.47)
 Maintainer: Bodo Endres <dev@muspekaren.se>
 Description: Cluster and cloud management toolkit build upon Ansible.
 " >"$PATH_TARGET/control"

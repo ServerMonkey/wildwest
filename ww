@@ -860,7 +860,11 @@ def ansible():
 
         run_as_root = ''
         if args.become:
-            run_as_root = ' -b'
+            # ask for password on localhost
+            if args.target == 'localhost':
+                run_as_root = ' -b -K'
+            else:
+                run_as_root = ' -b'
 
         # exe
         if args.command == 'exe':
@@ -1021,6 +1025,13 @@ def ansible_and_log():
     for i in ww_logs:
         # only print if there is a log file
         log_content = db_tryload(i)
+
+        # avoid displaying a log that is too large
+        # will not work anyway
+        log_content_size = len(str(log_content))
+        if log_content_size > 100000:
+            log_content = "The log output is too large to display, reduce it"
+
         if log_content:
             # add linefeed if there is none
             if not log_content.endswith('\n'):
@@ -1257,9 +1268,13 @@ def program_selector():
         cmd_exe_sub()
 
     # show how much time it took to execute a program
-    execution_time = str(round(time.time() - start_time, 1))
+    execution_time_sec = round(time.time() - start_time, 1)
+    execution_time_min = round(execution_time_sec / 60, 2)
     printv('')
-    printv("Took " + execution_time + " seconds")
+    if execution_time_sec < 60:
+        printv("Took " + str(execution_time_sec) + " seconds")
+    else:
+        printv("Took " + str(execution_time_min) + " minutes")
 
 
 def main():
