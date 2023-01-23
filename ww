@@ -10,6 +10,7 @@ import configparser
 import os
 import subprocess
 import re
+import sys
 
 # NEVER RUN AS ROOT ###########################################################
 
@@ -517,9 +518,12 @@ except Exception as first_run_error:
     print("Init failed: " + str(first_run_error))
     exit(1)
 
-# Add all subparsers
-dict_cfg = load_cfg()
-add_subparsers(dict_cfg)
+# Add all subparsers and autogenerate inventory
+# prevent inventory from generating twice
+for current_arg in sys.argv:
+    if current_arg != "gen":
+        dict_cfg = load_cfg()
+        add_subparsers(dict_cfg)
 
 # init TAB complete and parsers
 argcomplete.autocomplete(parser)
@@ -861,7 +865,7 @@ def ansible():
         run_as_root = ''
         if args.become:
             # ask for password on localhost
-            if args.target == 'localhost':
+            if 'localhost' in args.target:
                 run_as_root = ' -b -K'
             else:
                 run_as_root = ' -b'
@@ -1069,8 +1073,13 @@ def ansible_and_log():
                 os.system(shell_command_list + '"' + formatter)
 
             # print as normal
+            # todo: this is not working correclty when redirecting to a file
+            # replace with printf and color bg
             else:
-                print(col_host + log_hostname + col_end)
+                if args.format:
+                    print(log_hostname)
+                else:
+                    print(col_host + log_hostname + col_end)
                 os.system(shell_command_normal + '"' + formatter)
 
             # if html is enabled, output to temp file, for later use below
@@ -1117,7 +1126,6 @@ def ansible_and_log():
 
     # delete log index
     if not args.cachelogs:
-        printvvv("Delete log index")
         db_delete(cache_ww_logger)
 
 

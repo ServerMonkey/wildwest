@@ -33,7 +33,8 @@ echo "Copying relevant source files"
 # common shared
 mkdir -p "$PATH_SHARE"
 cp -t "$PATH_SHARE" "README.md" "copyright" "ansible_default.cfg" \
-"ww_default.cfg" "notification.wav" || exit 1
+    "ww_default.cfg" "ww_generic-developer.cfg" "ww_generic-sysadmin.cfg" \
+    "ww_generic-user.cfg" "notification.wav" || exit 1
 
 # playbooks
 cp -r "playbooks" "$PATH_SHARE" || exit 1

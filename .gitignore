@@ -1,5 +1,6 @@
-/.idea/
-/DEV_notes/
-/releases/
+/.idea
+/DEV_notes
+/releases
 /.directory
 /ansible-plugins/DEV_*
+/.gitignore
