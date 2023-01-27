@@ -1,4 +1,7 @@
 # wildwest
+
+Turns Ansible into a better automation management tool
+
 - Turn Ansible into a parallel ssh like tool
 - Speed optimized configuration with Mitogen
 - Automatic logging to readable text file

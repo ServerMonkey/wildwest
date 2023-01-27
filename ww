@@ -832,6 +832,16 @@ def divider():
     print("━" * int(columns))
 
 
+def get_root_args():
+    # ask for password on localhost
+    if 'localhost' in args.target:
+        root_args = ' -b -K'
+    else:
+        root_args = ' -b'
+
+    return root_args
+
+
 def ansible():
     printvv("ansible()")
 
@@ -864,11 +874,7 @@ def ansible():
 
         run_as_root = ''
         if args.become:
-            # ask for password on localhost
-            if 'localhost' in args.target:
-                run_as_root = ' -b -K'
-            else:
-                run_as_root = ' -b'
+            run_as_root = get_root_args()
 
         # exe
         if args.command == 'exe':
@@ -926,7 +932,7 @@ def ansible():
                     if line != "\n":
                         line_count += 1
                     if "#autoroot" in line:
-                        run_as_root = ' -b'
+                        run_as_root = get_root_args()
                         printvvv("Autodetected running script as root")
                     # stop counting after a few lines for speed
                     if line_count == 10:
@@ -947,7 +953,7 @@ def ansible():
                     if line != "\n":
                         line_count += 1
                     if "#autoroot" in line:
-                        run_as_root = ' -b'
+                        run_as_root = get_root_args()
                         printvvv("Autodetected running script as root")
                     # stop counting after a few lines for speed
                     if line_count == 10:
