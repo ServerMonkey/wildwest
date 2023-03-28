@@ -15,7 +15,8 @@ import sys
 # NEVER RUN AS ROOT ###########################################################
 
 if os.geteuid() == 0:
-    print("This software must be run as a normal user, not root!")
+    print("This software must be run as a normal user, not root!",
+          file=sys.stderr)
     exit(1)
 
 # BASIC STATIC VARIABLES ######################################################
@@ -51,6 +52,8 @@ path_logs = path_cache + "logs/"
 path_export = path_cache + "temp_export/"
 file_ansible_cfg = path_cfg + "ansible.cfg"
 file_ansible_cfg_local = path_home + '/.ansible.cfg'
+file_exe_name = "shell_command.sh"
+file_exe = path_cache + file_exe_name
 
 # base inventory
 file_inventory_server = path_inventory + "inventory.ini"
@@ -65,7 +68,7 @@ def cfg_check_category(namespace, path_script, category):
             pass
     except FileNotFoundError:
         print("Config error: [" + category + "] --> " + namespace +
-              "  can't be found in " + path_script)
+              "  can't be found in " + path_script, file=sys.stderr)
         exit(1)
 
 
@@ -178,16 +181,28 @@ def load_cfg():
                         else:
                             path_source = value
                         # generate inventory with inventorymaker
+                        if "gen" in sys.argv:
+                            try:
+                                os.remove(file_inventory_server)
+                            except FileNotFoundError:
+                                pass
+                            except Exception as error:
+                                print("Failed removing: " +
+                                      file_inventory_server + " " +
+                                      str(error), file=sys.stderr)
+                                exit(1)
                         cmd = 'inventorymaker ' + path_source + ' ' \
                               + file_inventory_server
                         try:
                             subprocess.run([cmd], check=True, shell=True)
                         except subprocess.CalledProcessError:
-                            print('Aborting, inventorymaker failed')
-                            print('Command was: ' + cmd)
+                            print('Aborting, inventorymaker failed',
+                                  file=sys.stderr)
+                            print('Command was: ' + cmd, file=sys.stderr)
                             exit(1)
                         except FileNotFoundError:
-                            print('ERROR: inventorymaker ist not installed')
+                            print('ERROR: inventorymaker ist not installed',
+                                  file=sys.stderr)
                             exit(1)
 
             # add tasks to subparser
@@ -211,8 +226,10 @@ def load_cfg():
 
             elif section == "playbooks-and-scripts":
                 key_path = key.rstrip('/') + "/"
+                key_path = key_path.replace('$HOME', path_home)
                 script_namespace = key.lower().rstrip('/').split(sep='/')
-                key_parser = script_namespace[-2] + "." + script_namespace[-1]
+                key_parser = script_namespace[-2].lstrip('.') + \
+                             "." + script_namespace[-1].lstrip('.')
                 dict_tmp.update(
                     get_dict_scripts(key_parser, key_path, section))
 
@@ -507,23 +524,9 @@ parser_exe.add_argument(
     type=str,
 )
 
-# first run
-try:
-    open(file_inventory_server, "r").close()
-except FileNotFoundError:
-    open(file_inventory_server, 'w').close()
-    print("Create empty inventory")
-    exit(0)
-except Exception as first_run_error:
-    print("Init failed: " + str(first_run_error))
-    exit(1)
-
 # Add all subparsers and autogenerate inventory
-# prevent inventory from generating twice
-for current_arg in sys.argv:
-    if current_arg != "gen":
-        dict_cfg = load_cfg()
-        add_subparsers(dict_cfg)
+dict_cfg = load_cfg()
+add_subparsers(dict_cfg)
 
 # init TAB complete and parsers
 argcomplete.autocomplete(parser)
@@ -612,7 +615,7 @@ def db_exist(file):
         printvvvv("DB_EXIST: OK no file " + file)
         return False
     except Exception as error:
-        print("DB_EXIST ERROR: " + file + " " + str(error))
+        print("DB_EXIST ERROR: " + file + " " + str(error), file=sys.stderr)
         exit_clean(1)
 
 
@@ -626,7 +629,7 @@ def db_mustload(file):
         printvvvv("DB_MUSTLOAD ERROR: File not found" + file)
         exit_clean(1)
     except Exception as error:
-        print("DB_MUSTLOAD ERROR: " + file + " " + str(error))
+        print("DB_MUSTLOAD ERROR: " + file + " " + str(error), file=sys.stderr)
         exit_clean(1)
 
 
@@ -640,7 +643,7 @@ def db_tryload(file):
         printvvvv("DB_TRYLOAD: No file, skipping " + file)
         return False
     except Exception as error:
-        print("DB_TRYLOAD ERROR: " + file + " " + str(error))
+        print("DB_TRYLOAD ERROR: " + file + " " + str(error), file=sys.stderr)
         exit_clean(1)
 
 
@@ -651,7 +654,7 @@ def db_delete(file):
     except FileNotFoundError:
         printvvvv("DB_DELETE: already deleted " + file)
     except Exception as error:
-        print("DB_DELETE ERROR: " + file + " " + str(error))
+        print("DB_DELETE ERROR: " + file + " " + str(error), file=sys.stderr)
         exit_clean(1)
 
 
@@ -661,7 +664,7 @@ def db_touch(file):
         f.close()
         printvvvv("DB_TOUCH : OK " + file)
     except Exception as error:
-        print("DB_TOUCH ERROR: " + file + " " + str(error))
+        print("DB_TOUCH ERROR: " + file + " " + str(error), file=sys.stderr)
         exit_clean(1)
 
 
@@ -672,7 +675,7 @@ def db_append(file, line):
         f.close()
         printvvvv("DB_APPEND: OK " + file + "  WITH:  " + line)
     except Exception as error:
-        print("DB_APPEND ERROR: " + file + " " + str(error))
+        print("DB_APPEND ERROR: " + file + " " + str(error), file=sys.stderr)
         exit_clean(1)
 
 
@@ -690,9 +693,10 @@ def exit_clean(error_nr=0):
     # play notification sound
     if args.notify:
         try:
-            os.system("aplay -q " + path_appdata + "notification.wav &")
+            os.system("aplay -q " + path_appdata +
+                      "notification.wav 1>/dev/null 2>/dev/null &")
         except Exception as error:
-            print("NOTIFICATION ERROR: " + str(error))
+            print("NOTIFICATION ERROR: " + str(error), file=sys.stderr)
 
     exit(error_nr)
 
@@ -709,7 +713,7 @@ def cache_get(cache_file):
     except FileNotFoundError:
         pass
     except Exception as error:
-        print("ERROR: " + str(error))
+        print("ERROR: " + str(error), file=sys.stderr)
         exit_clean(1)
 
     return cache_data
@@ -740,7 +744,8 @@ def lookup_targets():
 
     # check if hosts are defined
     if not args.target:
-        print("Missing target parameter, please define with '-t <HOSTNAME>'")
+        print("Missing target parameter, please define with '-t <HOSTNAME>'",
+              file=sys.stderr)
         exit_clean(1)
 
     inv_all = []
@@ -818,10 +823,10 @@ def load_worklist_content():
         return worklist_content
     except FileNotFoundError:
         print("LOAD_WORKLIST_CONTENT ERROR: The worklist " + worklist +
-              " does not exist.")
+              " does not exist.", file=sys.stderr)
         exit_clean(1)
     except Exception as error:
-        print("LOAD_WORKLIST_CONTENT ERROR: " + str(error))
+        print("LOAD_WORKLIST_CONTENT ERROR: " + str(error), file=sys.stderr)
         exit_clean(1)
 
 
@@ -877,13 +882,12 @@ def ansible():
             run_as_root = get_root_args()
 
         # exe
+        ww_script_type = ''
+        ww_script = ''
+        ww_path = ''
+        args_command_sub = ''
         if args.command == 'exe':
-            args_command_sub = 'exe'
-            # ansible variables
-            ww_path = path_playbooks
-            ww_script = "shell_command.sh"
-            ww_category = ""
-            ww_script_type = "exe"
+            ww_category = "exe"
         else:
             args_command_sub = args.command_sub
             # ansible variables
@@ -921,6 +925,13 @@ def ansible():
             path_workdir = ww_path
             playbook = ww_script
 
+        elif ww_category == "exe":
+            path_workdir = path_playbooks
+            playbook = "run_sh.yml"
+            extra_vars += ' ww_path=' + path_cache
+            extra_vars += ' ww_script=' + file_exe_name
+            extra_vars += ' ww_role=' + "exe"
+
         # override if shellscript
         if ww_script_type == "sh":
             path_workdir = path_playbooks
@@ -942,34 +953,13 @@ def ansible():
             extra_vars += ' ww_path=' + ww_path
             extra_vars += ' ww_script=' + ww_script
 
-        # override if shellscript run with exe
-        if ww_script_type == "exe":
-            path_workdir = path_playbooks
-            # automatically detect sh scripts that shall run as root
-            if db_exist(ww_path + ww_script):
-                f = open(ww_path + ww_script, "r")
-                line_count = 0
-                for line in f:
-                    if line != "\n":
-                        line_count += 1
-                    if "#autoroot" in line:
-                        run_as_root = get_root_args()
-                        printvvv("Autodetected running script as root")
-                    # stop counting after a few lines for speed
-                    if line_count == 10:
-                        break
-                f.close()
-            playbook = "run_sh.yml"
-            extra_vars += ' ww_path=' + ww_path
-            extra_vars += ' ww_script=' + ww_script
-            extra_vars += ' ww_role=' + "exe"
-
         # easier to use relative paths
         try:
             os.chdir(path_workdir)
             printvvv("chdir to " + path_workdir)
         except Exception as error:
-            print("ERROR: os.chdir(path_workdir) " + str(error))
+            print("ERROR: os.chdir(path_workdir) " + str(error),
+                  file=sys.stderr)
             exit_clean(1)
 
         # new
@@ -988,7 +978,7 @@ def ansible():
             os.system(cmd)
             print("")
         except Exception as error:
-            print("ERROR os.system(cmd): " + str(error))
+            print("ERROR os.system(cmd): " + str(error), file=sys.stderr)
             exit_clean(1)
 
 
@@ -1124,8 +1114,8 @@ def ansible_and_log():
                     m + '/g" > ' +
                     file_report_out)
             except Exception as error:
-                print("Can't write HTML output file!")
-                print("ERROR: " + str(error))
+                print("Can't write HTML output file!", file=sys.stderr)
+                print("ERROR: " + str(error), file=sys.stderr)
 
             # cleanup, delete old report
             db_delete(file_report_in)
@@ -1169,11 +1159,6 @@ def cmd_ed():
     os.system("editor " + path_worklists + load_worklist())
 
 
-def cmd_gen():
-    db_delete(file_inventory_server)
-    load_cfg()
-
-
 def cmd_edin():
     # init the ini parser and allow single string keys
     config = configparser.ConfigParser(allow_no_value=True)
@@ -1200,7 +1185,8 @@ def cmd_edin():
                         os.system("cd " + path_source +
                                   " && visidata . --fancy-chooser=1")
                     else:
-                        print("No inventory source defined in config")
+                        print("No inventory source defined in config",
+                              file=sys.stderr)
 
 
 def cmd_rm():
@@ -1211,9 +1197,9 @@ def cmd_rm():
         os.remove(path_worklists + worklist_to_rm)
         print("Worklist " + worklist_to_rm + " deleted.")
     except FileNotFoundError:
-        print("There is no worklist with that name.")
+        print("There is no worklist with that name.", file=sys.stderr)
     except Exception as error:
-        print("CMD_RM ERROR: " + str(error))
+        print("CMD_RM ERROR: " + str(error), file=sys.stderr)
         exit_clean(1)
 
     # only reset the worklist to temp if the current worklist and
@@ -1237,16 +1223,14 @@ def cmd_exe():
     # path variables
     shell_command = args.SHELL_COMMAND
 
-    tmp_script = "shell_command.sh"
-    cache_shell_code = path_playbooks + tmp_script
-    db_delete(cache_shell_code)
-    db_append(cache_shell_code, '#!/bin/sh')
-    db_append(cache_shell_code, shell_command)
+    db_delete(file_exe)
+    db_append(file_exe, '#!/bin/sh')
+    db_append(file_exe, shell_command)
     printvvv("Command is: " + shell_command)
 
     ansible_and_log()
 
-    db_delete(cache_shell_code)
+    db_delete(file_exe)
 
 
 def cmd_exe_sub():
@@ -1273,7 +1257,7 @@ def program_selector():
     elif case == "edin":
         cmd_edin()
     elif case == "gen":
-        cmd_gen()
+        pass
     elif case == "rm":
         cmd_rm()
     elif case == "exe":

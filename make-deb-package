@@ -70,10 +70,11 @@ Recommends: visidata,
  gpg-agent (>=2.2.27),
  pinentry-curses (>=1.1.0),
  ansible-lint (>=4.1.0),
- usbprep,
- inventorymaker
+ python3-lxml (>=4.6),
+ alsa-utils (>=1.2)
 Suggests: graphviz (>=2.40.1),
- dpkg-repack (>=1.47)
+ dpkg-repack (>=1.47),
+ inventorymaker
 Maintainer: Bodo Endres <dev@muspekaren.se>
 Description: Turns Ansible into a better automation management tool
 " >"$PATH_TARGET/control"

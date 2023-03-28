@@ -8,17 +8,30 @@ Turns Ansible into a better automation management tool
 - Run Ansible tasks and roles directly without Playbook
 - Run shell script directly without Playbook
 
-## Usage
-Run `ww -h` to get help.
-
-ww uses CCZE internally to colorize logs.  
-Read the code here to see what words will be highlighted in different colors: here: https://github.com/cornet/ccze/blob/master/src/ccze-wordcolor.c
-
 ## Installation
 Tested on Debian 11
 
 Enable global python-argcomplete:  
 `sudo activate-global-python-argcomplete3`  
+
+## Configuration
+Default configuration can be found in:  
+/usr/local/share/wildwest/ww_default.cfg  
+Read this file for more information.
+
+Default Ansible configuration can be found in:  
+/usr/local/share/wildwest/ansible_default.cfg  
+Read this file for more information.
+
+Current user configuration is in ~.ww/ww.cfg
+
+If there is no existing ~.ansible.cfg configuration, wildwest will create a symlink to ~.ww/ansible.cfg at runtime.
+
+## Usage
+Run `ww -h` for help.
+
+ww uses CCZE internally to colorize logs.  
+Read the code here to see what words will be highlighted in different colors:   https://github.com/cornet/ccze/blob/master/src/ccze-wordcolor.c
 
 ## Basic Scripting Guide
 All playbooks and shell-scripts should always have this basic code in the header:  
