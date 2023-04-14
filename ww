@@ -975,11 +975,20 @@ def ansible():
         printvvv(cmd)
         printvvv("")
         try:
-            os.system(cmd)
-            print("")
-        except Exception as error:
-            print("ERROR os.system(cmd): " + str(error), file=sys.stderr)
+            subprocess.run([cmd],
+                           check=True, shell=True,
+                           stderr=subprocess.STDOUT)
+        # this will always return error if returncode is not 0
+        except subprocess.CalledProcessError:
+            print('Aborting, ansible failed', file=sys.stderr)
+            # print('Command was: ' + cmd, file=sys.stderr)
+            # print('Return code: ' + str(error.returncode))
             exit_clean(1)
+        except FileNotFoundError:
+            print('ERROR: ansible ist not installed', file=sys.stderr)
+            exit_clean(1)
+        else:
+            print('')
 
 
 def sort_natural(s):
