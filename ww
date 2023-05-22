@@ -384,11 +384,8 @@ if not os.path.isfile(file_ansible_cfg_local):
     os.symlink(file_ansible_cfg, file_ansible_cfg_local)
 
 # set main parser
-parser = argparse.ArgumentParser(description="Cluster and cloud management \
-                                   toolkit build upon Ansible. \
-                                   Useful if you work on specific parts of a \
-                                   cluster or groups of virtual machines. \
-                                   Written by Bodo Endres.")
+parser = argparse.ArgumentParser(description="Turn Ansible into a better \
+                                 automation management tool")
 
 # designate the target variable for the main parser,
 # which is the main applications file name
@@ -398,9 +395,11 @@ subparsers = parser.add_subparsers(dest="command")
 
 parser.add_argument(
     "-t", "--target",
-    help="Ansible inventory host(s). \
-    Several targets need to be comma separated. For example: \
-    'ww -t node100-1,node100-2 servermonkey.ww info_test'.",
+    help="Is the name of the host or host group in the Ansible inventory. \
+    If you use inventorymaker, the group name can also be the same as the \
+    inventory CSV file name. You can also use Ansible patterns like \
+    'host3,host10' or 'host*', see: \
+    https://docs.ansible.com/ansible/latest/inventory_guide/intro_patterns.html",
     metavar='HOST',
     type=str,
 )
@@ -425,7 +424,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "-n", "--notify",
-    help="Play a notification sound when done.",
+    help="Play a notification sound when done. Uses aplay.",
     action='store_true',
 )
 parser.add_argument(
@@ -437,7 +436,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "-w", "--watch",
-    help="Repeat the same command and watch the output. In seconds.",
+    help="Repeat the same play and watch the output. In seconds.",
     metavar='SECONDS',
     # nargs='?',
     type=int,
@@ -446,7 +445,7 @@ parser.add_argument(
 parser.add_argument(
     "-x", "--export",
     help="Save the script output to a colorful HTML file. Will be saved to \
-    .ww/reports. Only works with roles 'servermonkey.sh' and \
+    ~/.ww/reports. Only works with roles 'servermonkey.sh' and \
     'servermonkey.ww_logger'.",
     action='store_true',
 )
@@ -502,7 +501,7 @@ parser_edin = subparsers.add_parser(
 
 parser_gen = subparsers.add_parser(
     "gen",
-    help="Regenerate Inventorymaker inventory file."
+    help="Force to regenerate the inventory file."
 )
 
 # EXE
