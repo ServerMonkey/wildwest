@@ -40,16 +40,14 @@ cp -r "playbooks" "$PATH_SHARE" || exit 1
 
 # plugins
 PATH_ANSPLUG="$PATH_SHARE/ansible-plugins"
-mkdir -p "$PATH_ANSPLUG"
+mkdir -p "$PATH_ANSPLUG" || exit 1
 cp -r "ansible-plugins/ww-anstomlog-mod" "$PATH_ANSPLUG" || exit 1
 cp -r "ansible-plugins/ww-mitogen" "$PATH_ANSPLUG" || exit 1
 
 # binarys
-mkdir -p "$PATH_BIN"
-cp -t "$PATH_BIN" "ww" || exit 1
-cp -t "$PATH_BIN" "ww-verify" || exit 1
-cp -t "$PATH_BIN" "ww-facts" || exit 1
-chmod 0755 "ww" "ww-verify" "ww-facts"
+mkdir -p "$PATH_BIN" || exit 1
+cp -t "$PATH_BIN" "ww" "ww-facts" "ww-task" "ww-verify" || exit 1
+chmod -R 0755 "$PATH_BIN" || exit 1
 
 # create Debian control file
 echo "Creating CONTROL file"

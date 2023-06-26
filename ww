@@ -61,6 +61,17 @@ file_inventory_server = path_inventory + "inventory.ini"
 
 # PARSER FUNCTIONS ############################################################
 
+# def only_run_once():
+#     process_counter = 0
+#     for p in psutil.process_iter():
+#         if ' '.join(sys.argv) in ' '.join(p.cmdline()):
+#             process_counter = process_counter + 1
+#
+#     if process_counter > 1:
+#         print("The same instance is already running", file=sys.stderr)
+#         exit(1)
+
+
 def cfg_check_category(namespace, path_script, category):
     # check if path in config file exist
     try:
@@ -344,6 +355,10 @@ def add_subparsers(dictionary):
 
 
 # PARSER INIT #################################################################
+
+# todo:
+# only run once instance of the same commandline
+# only_run_once()
 
 # create basic directorie structure
 if not os.path.isdir(path_cfg):

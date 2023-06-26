@@ -1,0 +1,36 @@
+#!/bin/sh
+#info: Starts wildwest actions in background, use this in crontab
+
+if [ -z "$1" ]; then
+    echo "TARGET unset or empty"
+    exit 1
+fi
+if [ -z "$2" ]; then
+    echo "NAMESPACE unset or empty"
+    exit 1
+fi
+if [ -z "$3" ]; then
+    echo "ACTION unset or empty"
+    exit 1
+fi
+
+TARGET="$1"
+NAMESPACE="$2"
+ACTION="$3"
+
+error() {
+    echo "ERROR: $1"
+    exit 1
+}
+
+SP="_"
+CURRENT_DATE=$(date "+%F_%T" | sed 's/:/-/g')
+TARGETFORMAT=$(echo "$TARGET" | sed 's/ /,/g' | sed 's/*/(WC)/g')
+PATH_LOG="$HOME/.ww/cache/logs_task"
+FILE_LOG="$CURRENT_DATE$SP$TARGETFORMAT$SP$NAMESPACE$SP$ACTION.log"
+LOG_OUT="$PATH_LOG/$FILE_LOG"
+
+mkdir -p "$PATH_LOG" || error "create dir $PATH_LOG"
+touch "$LOG_OUT" || error "create log $LOG_OUT"
+echo "$CURRENT_DATE: Task: $TARGET $NAMESPACE $ACTION"
+/usr/local/bin/ww -t "$TARGET" "$NAMESPACE" -b "$ACTION" >>"$LOG_OUT" 2>&1 &

@@ -123,6 +123,12 @@ If no command is given, wildwest assumes you want to use -h or -t.
   See: [github.com/ServerMonkey/ansible-role-servermonkey-sh](https://github.com/ServerMonkey/ansible-role-servermonkey-sh)  
   and [github.com/ServerMonkey/ansible-role-servermonkey-ww-logger](https://github.com/ServerMonkey/ansible-role-servermonkey-ww-logger)
 
+### CRONTAB
+
+`ww-task <TARGET> <NAMESPACE> <ACTION>` : Wrapper for ww. Starts wildwest
+actions in background, use this in crontab. Always Uses become. Will write a
+logfile to "~/.ww/cache/logs_task"
+
 ## ADDITIONAL FEATURES
 
 wildwest comes with an extra logging system that can be used via this role:  
