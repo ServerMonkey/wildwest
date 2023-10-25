@@ -26,21 +26,26 @@ app = os.path.realpath(__file__)
 app_name = str(app.rsplit("/", 1)[1])
 path_app = app.rstrip(app_name)
 path_home = os.path.expanduser("~")
-# path_cfg = path_home + "/." + app_name + "/"
 path_cfg = path_home + "/.ww/"
 file_ww_cfg = path_cfg + "ww.cfg"
 
-# pathes global
+# path's global
 path_appdata = "/usr/local/share/wildwest/"
 path_plugins_os = path_appdata + "ansible-plugins/"
-path_playbooks_share = path_appdata + "playbooks"
+path_playbooks_share = path_appdata + "playbooks/"
 
-# pathes galaxy
+# path's galaxy OS
+path_ansible_os = "/usr/share/ansible/"
+path_roles_os = path_ansible_os + "roles/"
+path_collections_os = path_ansible_os + "collections/"
+
+# path's galaxy
 path_ansible = path_home + "/.ansible/"
 path_roles = path_ansible + "roles/"
-path_collections = path_ansible + "collections/ansible_collections/"
+path_collections_base = path_ansible + "collections/"
+path_collections = path_collections_base + "ansible_collections/"
 
-# pathes local
+# path's local
 path_reports = path_cfg + "reports/"
 path_playbooks = path_cfg + "playbooks/"
 path_inventory = path_cfg + "inventory/"
@@ -58,9 +63,13 @@ file_exe = path_cache + file_exe_name
 # base inventory
 file_inventory_server = path_inventory + "inventory.ini"
 
+# misc
+file_metadata = "pkg.txt"
+
 
 # PARSER FUNCTIONS ############################################################
 
+# todo:
 # def only_run_once():
 #     process_counter = 0
 #     for p in psutil.process_iter():
@@ -166,9 +175,7 @@ def get_dict_galaxyroles(namespace, path_script, category):
     return dict_tmp
 
 
-def load_cfg():
-    dict_tmp = {}
-
+def load_cfg(dict_tmp):
     # init the ini parser and allow single string keys
     config = configparser.ConfigParser(allow_no_value=True)
     config.optionxform = lambda option: option
@@ -215,34 +222,8 @@ def load_cfg():
                             print('ERROR: inventorymaker ist not installed',
                                   file=sys.stderr)
                             exit(1)
-
-            # add tasks to subparser
-            elif section == "galaxy-playbooks":
-                key_path = path_collections + namespace[0] + "/" \
-                           + namespace[1] + "/playbooks/"
-                dict_tmp.update(get_dict_scripts(key, key_path, section))
-
-            elif section == "galaxy-roles":
-                key_path = path_collections + namespace[0] + "/" + \
-                           namespace[1] + "/roles/"
-                dict_tmp.update(get_dict_galaxyroles(key, key_path, section))
-
-            elif section == "role":
-                key_path = path_roles + key + "/"
-                dict_tmp.update(get_dict_role(key, key_path, section))
-
-            elif section == "tasks-from-roles":
-                key_path = path_roles + key + "/tasks/"
-                dict_tmp.update(get_dict_scripts(key, key_path, section))
-
-            elif section == "playbooks-and-scripts":
-                key_path = key.rstrip('/') + "/"
-                key_path = key_path.replace('$HOME', path_home)
-                script_namespace = key.lower().rstrip('/').split(sep='/')
-                key_parser = script_namespace[-2].lstrip('.') + \
-                             "." + script_namespace[-1].lstrip('.')
-                dict_tmp.update(
-                    get_dict_scripts(key_parser, key_path, section))
+            else:
+                dict_tmp.update(ansible_folder_to_dict(key, section))
 
     return dict_tmp
 
@@ -312,20 +293,27 @@ def add_subparsers(dictionary):
         # key_category = key[1][5]  # todo: unused
 
         # load help text
-        if key_type == 'tasks-from-roles':
-            key_firstparser_help = key_path.replace('/tasks/', '/') + "ww.txt"
+        if key_type == 'role-tasks':
+            key_firstparser_help = key_path.replace(
+                '/tasks/', '/') + file_metadata
         elif key_type == 'galaxy-playbooks':
-            key_firstparser_help = key_path.replace('/playbooks/',
-                                                    '/') + "ww.txt"
+            key_firstparser_help = key_path.replace(
+                '/playbooks/', '/') + file_metadata
         else:
-            key_firstparser_help = key_path + "ww.txt"
+            key_firstparser_help = key_path + file_metadata
         # default help text
         # todo: replace with better search
         # text_help = "Please add a help file to " + key_firstparser_help
 
         try:
             with open(key_firstparser_help, "r") as f:
-                text_help = f.read()
+                # iterate untill line starts with Description
+                for g in f:
+                    if g.startswith("Description:"):
+                        text_help = g.lstrip("Description:").lstrip(" ")
+                # bugfix argparse
+                if "%" in text_help:
+                    text_help = text_help.replace("%", "percent")
         except FileNotFoundError:
             text_help = key_type
 
@@ -354,13 +342,111 @@ def add_subparsers(dictionary):
                                           help=key_secondparser_help)
 
 
+def ansible_folder_to_dict(folder_name, section):
+    dict_tmp = {}
+    namespace = folder_name.split(sep='.')
+
+    # add tasks to subparser
+    if section == "galaxy-playbooks":
+        path = path_collections + namespace[0] + "/" \
+               + namespace[1] + "/playbooks/"
+        dict_tmp.update(get_dict_scripts(folder_name, path, section))
+
+    elif section == "galaxy-roles":
+        path = path_collections + namespace[0] + "/" + \
+               namespace[1] + "/roles/"
+        dict_tmp.update(get_dict_galaxyroles(folder_name, path, section))
+
+    elif section == "role":
+        path = path_roles + folder_name + "/"
+        dict_tmp.update(get_dict_role(folder_name, path, section))
+
+    elif section == "role-tasks":
+        path = path_roles + folder_name + "/tasks/"
+        dict_tmp.update(get_dict_scripts(folder_name, path, section))
+
+    elif section == "scripts":
+        path = folder_name.rstrip('/') + "/"
+        path = path.replace('$HOME', path_home)
+        script_namespace = folder_name.lower().rstrip('/').split(sep='/')
+        role_parser = script_namespace[-2].lstrip('.') + "." + \
+                      script_namespace[-1].lstrip('.')
+        dict_tmp.update(
+            get_dict_scripts(role_parser, path, section))
+
+    return dict_tmp
+
+
+def auto_import_role(dict_tmp, path_src):
+    for folder_name in os.listdir(path_src):
+        section = ""
+        pkg_info = path_src + folder_name + '/' + file_metadata
+
+        # check if pkg_info exists
+        if os.path.isfile(pkg_info):
+
+            try:
+                with open(pkg_info, "r") as f:
+                    # iterate untill line starts with Description
+                    for g in f:
+                        if g.startswith("Ansible-Section:"):
+                            section = g.lstrip("Ansible-Section:").lstrip(
+                                " ").rstrip('\n')
+            # print error on any error
+            except Exception as error:
+                print("ERROR: " + str(error), file=sys.stderr)
+                exit_clean(1)
+
+            if section:
+                dict_tmp.update(ansible_folder_to_dict(folder_name, section))
+
+    return dict_tmp
+
+
+def auto_import_coll(dict_tmp, path_src):
+    for folder in os.listdir(path_src):
+        for sub_folder in os.listdir(path_src + '/' + folder):
+            section = ""
+            pkg_info = path_src + folder + '/' + sub_folder + '/' + \
+                       file_metadata
+            # check if pkg_info exists
+            if os.path.isfile(pkg_info):
+
+                try:
+                    with open(pkg_info, "r") as f:
+                        # iterate untill line starts with Description
+                        for g in f:
+                            if g.startswith("Ansible-Section:"):
+                                section = g.lstrip("Ansible-Section:").lstrip(
+                                    " ").rstrip('\n')
+                # print error on any error
+                except Exception as error:
+                    print("ERROR: " + str(error), file=sys.stderr)
+                    exit_clean(1)
+
+                if section:
+                    dict_tmp.update(
+                        ansible_folder_to_dict(folder + '.' + sub_folder,
+                                               section))
+
+    return dict_tmp
+
+
+def link_ansible_galaxy(path_src, path_des):
+    for i in os.listdir(path_src):
+        folder_src = path_src + i
+        folder_des = path_des + i
+        if not os.path.exists(folder_des) and os.path.isdir(folder_src):
+            os.symlink(folder_src, folder_des)
+
+
 # PARSER INIT #################################################################
 
 # todo:
 # only run once instance of the same commandline
 # only_run_once()
 
-# create basic directorie structure
+# create basic directory structure
 if not os.path.isdir(path_cfg):
     os.makedirs(path_cfg)
 if not os.path.isdir(path_cache):
@@ -392,11 +478,23 @@ if not os.path.isfile(file_ww_cfg):
 
 # symlink to local playbooks
 if not os.path.isdir(path_playbooks):
-    os.symlink(path_playbooks_share, path_cfg + "playbooks")
+    os.symlink(path_playbooks_share.rstrip('/'), path_cfg + "playbooks")
 
 # symlink to local ansible.cfg
 if not os.path.isfile(file_ansible_cfg_local):
     os.symlink(file_ansible_cfg, file_ansible_cfg_local)
+
+# create ansible galaxy user path's
+if not os.path.isdir(path_roles):
+    os.makedirs(path_roles)
+if not os.path.isdir(path_collections):
+    os.makedirs(path_collections)
+
+# link ansible galaxy roles and collections from OS to user path's
+if os.path.exists(path_roles_os):
+    link_ansible_galaxy(path_roles_os, path_roles)
+if os.path.exists(path_collections_os):
+    link_ansible_galaxy(path_collections_os, path_collections)
 
 # set main parser
 parser = argparse.ArgumentParser(description="Turn Ansible into a better \
@@ -413,7 +511,7 @@ parser.add_argument(
     help="Is the name of the host or host group in the Ansible inventory. \
     If you use inventorymaker, the group name can also be the same as the \
     inventory CSV file name. You can also use Ansible patterns like \
-    'host3,host10' or 'host*', see: \
+    'host3,host10', 'host*' or 'host?1', see: \
     https://docs.ansible.com/ansible/latest/inventory_guide/intro_patterns.html",
     metavar='HOST',
     type=str,
@@ -538,8 +636,13 @@ parser_exe.add_argument(
     type=str,
 )
 
-# Add all subparsers and autogenerate inventory
-dict_cfg = load_cfg()
+# Add subparsers from ansible folders that have the pkg.txt file
+dict_cfg = {}
+auto_import_role(dict_cfg, path_roles)
+auto_import_coll(dict_cfg, path_collections)
+# Add subparsers from config and autogenerate inventory
+load_cfg(dict_cfg)
+dict_cfg = dict(sorted(dict_cfg.items()))
 add_subparsers(dict_cfg)
 
 # init TAB complete and parsers
@@ -576,6 +679,7 @@ col_cyan = "\x1b[7;36;40m"
 
 
 # FUNCTIONS BASIC #############################################################
+
 
 def printv(text):
     if args.verbose and args.verbose >= 1:
@@ -929,13 +1033,13 @@ def ansible():
             playbook = "run_role.yml"
             extra_vars += ' ww_role=' + args.command + "." + args_command_sub
 
-        elif ww_category == "tasks-from-roles":
+        elif ww_category == "role-tasks":
             path_workdir = path_playbooks
             playbook = "run_task.yml"
             extra_vars += ' ww_role=' + args.command
             extra_vars += ' ww_script=' + args_command_sub
 
-        elif ww_category in ('galaxy-playbooks', 'playbooks-and-scripts'):
+        elif ww_category in ('galaxy-playbooks', 'scripts'):
             path_workdir = ww_path
             playbook = ww_script
 
@@ -992,7 +1096,7 @@ def ansible():
             subprocess.run([cmd],
                            check=True, shell=True,
                            stderr=subprocess.STDOUT)
-        # this will always return error if returncode is not 0
+        # this will always return error if return code is not 0
         except subprocess.CalledProcessError:
             print('Aborting, ansible failed', file=sys.stderr)
             # print('Command was: ' + cmd, file=sys.stderr)

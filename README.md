@@ -22,14 +22,15 @@ write proper playbooks or scripts instead.
 
 Tested on Debian 11
 
-To enable TAB complete for ww, install python-argcomplete3 and then enable it:
+To enable TAB complete for ww, install python3-argcomplete and then enable it:
 
-    $ sudo activate-global-python-argcomplete3
+    $ sudo activate-global-python-argcomplete || sudo activate-global-python-argcomplete3
 
 ## CONFIGURATION
 
 Default configuration can be found in:  
 **/usr/local/share/wildwest/ww_default.cfg**  
+The first time ww is run it will copy this file to ~/.ww/ww.cfg
 Open this file to get a better understanding of how wildwest facilitates
 namespace and inventory management.
 
@@ -37,10 +38,19 @@ The current user configuration is stored in ~/.ww/ww.cfg
 
 The default Ansible configuration can be found in:  
 **/usr/local/share/wildwest/ansible_default.cfg**  
-Open this file for more information.
+The first time ww is run it will copy this file to ~/.ww/ansible.cfg
+Open this file for more information and to add your custom settings.
 
 The default settings are optimized for any generic workstation, and connecting
 up to around 1000 hosts simultaniously.
+
+If there is not ~/.ansible.cfg file, wildwest will link to ~/.ww/ansible.cfg
+instead.
+
+Put your global Ansible roles and collections in:  
+**/usr/share/ansible/roles** or **/etc/ansible/roles**  
+If you want to override above roles/collections or develop your own, put them
+in: **~/.ansible/roles** or **~/.ansible/collections**
 
 ## USAGE
 

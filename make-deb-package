@@ -93,6 +93,12 @@ wait
 cp "$PATH_BASE.deb" "$RELEASES/$NAME-LATEST.deb"
 cp "$PATH_BASE.source.zip" "$RELEASES/$NAME-LATEST-source.zip"
 
+# replace latest version
+cd "$RELEASES" || exit 1
+ln -sf "$NAME-$VERSION.deb" "$NAME-LATEST.deb"
+ln -sf "$NAME-$VERSION.source.zip" "$NAME-LATEST.source.zip"
+cd "$APP_DIR" || exit 1
+
 # clean up
 echo "Clean up"
 rm -rf "$PATH_BASE"
