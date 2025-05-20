@@ -46,7 +46,7 @@ cp -r "ansible-plugins/ww-mitogen" "$PATH_ANSPLUG" || exit 1
 
 # binarys
 mkdir -p "$PATH_BIN" || exit 1
-cp -t "$PATH_BIN" "ww" "ww-facts" "ww-task" "ww-verify" || exit 1
+cp -t "$PATH_BIN" "ww" "ww-facts" "ww-task" "ww-verify" "wwssh" || exit 1
 chmod -R 0755 "$PATH_BIN" || exit 1
 
 # create Debian control file
@@ -61,6 +61,7 @@ Depends: python3 (>= 3.0),
  python3-argcomplete (>=1.8.1),
  ansible (>= 2.7.7),
  ansible-mitogen (>= 0.3),
+ ansible-anstomlog,
  sshpass (>= 1.06),
  ccze (>=0.2.1)
 Recommends: visidata,
@@ -91,7 +92,6 @@ wait
 
 # replace latest version
 cp "$PATH_BASE.deb" "$RELEASES/$NAME-LATEST.deb"
-cp "$PATH_BASE.source.zip" "$RELEASES/$NAME-LATEST-source.zip"
 
 # replace latest version
 cd "$RELEASES" || exit 1

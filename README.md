@@ -4,7 +4,6 @@ Wildwest is a wrapper for Ansible, the goal is to make Ansible easier to use.
 It also adds several new features to Ansible which makes it easier to use
 Ansible as a general purpose automation tool.
 
-- Turn Ansible into a parallel-ssh like tool
 - Less verbose output via custom Anstomlog
 - Colorized output / logs and save to an HTML file
 - TAB Autocomplete playbooks, tasks and scripts
@@ -19,8 +18,6 @@ runtime parameters there is less room for input errors. It forces the user to
 write proper playbooks or scripts instead.
 
 ## INSTALLATION
-
-Tested on Debian 11
 
 To enable TAB complete for ww, install python3-argcomplete and then enable it:
 
@@ -132,6 +129,14 @@ If no command is given, wildwest assumes you want to use -h or -t.
   servermonkey.ww_logger'.  
   See: [github.com/ServerMonkey/ansible-role-servermonkey-sh](https://github.com/ServerMonkey/ansible-role-servermonkey-sh)  
   and [github.com/ServerMonkey/ansible-role-servermonkey-ww-logger](https://github.com/ServerMonkey/ansible-role-servermonkey-ww-logger)
+
+### SSH
+
+`wwssh <TARGET>` : Automatically SSH into a host. This is useful when you want
+to SSH into a host that is not in your /etc/hosts file. This command will
+automatically find the user and login credentials from the Ansible inventory.
+
+`wwssh -l, --list` : List all hosts in the Ansible inventory.
 
 ### CRONTAB
 

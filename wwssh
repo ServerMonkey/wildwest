@@ -1,0 +1,56 @@
+#!/bin/sh
+#info: Load Ansible login credentials from .ww/inventory/inventory.ini
+#info: then login via SSH
+
+error() {
+    echo "ERROR: $1" >&2
+    unset SSHPASS
+    exit 1
+}
+
+parse() {
+    echo "$1" | grep -o "$2=.*" | cut -d "=" -f 2
+}
+
+# args
+if [ "$1" = "--list" ] || [ "$1" = "-l" ]; then
+    LIST_HOSTS=true
+else
+    TARGET="$1"
+fi
+
+# inventory file
+INVENTORY="$HOME/.ww/inventory/inventory.ini"
+[ -f "$INVENTORY" ] || error "No inventory file found"
+
+# only list hosts
+if [ "$LIST_HOSTS" = true ]; then
+    grep -v "^\[" <"$INVENTORY" | grep -v "^$" | grep -v "^#" |
+        grep -v "^im_" | grep -v "^ansible_" | cut -d " " -f 1 | uniq | column
+    exit 0
+fi
+
+# get ansible variables, remove the hostname
+[ -n "$TARGET" ] || error "No target specified"
+DATA_INVENTORY=$(grep "^$TARGET ansible_" <"$INVENTORY")
+[ -n "$DATA_INVENTORY" ] || error "Not in inventory: $TARGET"
+
+DATA=$(echo "$DATA_INVENTORY" | sed "s/^$TARGET //g" | tr -d \")
+[ -n "$DATA" ] || error "No credentials found for $TARGET"
+
+# parse data
+SSH_USER=$(parse "$DATA" "ansible_user")
+[ -n "$SSH_USER" ] || error "No ansible_user found for $TARGET"
+SSH_PASS=$(parse "$DATA" "ansible_password")
+[ -n "$SSH_PASS" ] || error "No ansible_password found for $TARGET"
+SSH_HOST=$(parse "$DATA" "ansible_host")
+[ -n "$SSH_HOST" ] || SSH_HOST="$TARGET"
+
+# export password
+export SSHPASS="$SSH_PASS"
+
+# logia via SSH
+sshpass -e ssh "$SSH_USER"@"$SSH_HOST" || error "SSH login failed"
+
+# unset password
+unset SSHPASS || error "Failed to unset SSHPASS"

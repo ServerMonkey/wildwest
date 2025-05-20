@@ -1,5 +1,12 @@
 #!/bin/sh
 
+if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "Find Ansible facts variables"
+    echo ""
+    echo "ww-facts <HOSTNAME> <SEARCH_PATTERN>"
+    exit 0
+fi
+
 PATH_SEARCH="$HOME/.ww/cache/facts"
 
 VAR_HOSTNAME=$1
